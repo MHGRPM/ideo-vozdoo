@@ -21,10 +21,11 @@ import time
 from pathlib import Path
 
 import numpy as np
-import pyperclip
 import sounddevice as sd
 from faster_whisper import WhisperModel
 from pynput import keyboard as pkb
+
+from clipboard_paste import paste_text
 
 SCRIPT_DIR = Path(__file__).parent
 ENV_FILE = SCRIPT_DIR / ".env"
@@ -209,48 +210,6 @@ def hotkeys_overlap(a: frozenset, b: frozenset) -> bool:
     según el orden de pulsación. Ver spec 2026-09-18-polish-bubble-design.
     """
     return a <= b or b <= a
-
-
-def paste_text(text: str, auto_paste: bool) -> None:
-    """Copia el texto al portapapeles y, si auto_paste, simula Ctrl+V.
-
-    Restaura el portapapeles anterior tras el pegado para no perder lo que
-    el usuario tuviera copiado antes de dictar.
-    """
-    previous = None
-    try:
-        previous = pyperclip.paste()
-    except Exception:
-        pass
-
-    try:
-        pyperclip.copy(text)
-    except Exception as exc:
-        log.warning("No se pudo copiar al portapapeles (%s). Texto: %s", exc, text)
-        return
-
-    if not auto_paste:
-        return
-
-    controller = pkb.Controller()
-    modifier = pkb.Key.cmd if sys.platform == "darwin" else pkb.Key.ctrl
-    try:
-        with controller.pressed(modifier):
-            controller.press("v")
-            controller.release("v")
-    except Exception as exc:
-        log.warning("No se pudo simular Ctrl+V (%s). El texto sigue en el portapapeles.", exc)
-        return
-
-    if previous is not None:
-        def restore():
-            time.sleep(0.5)
-            try:
-                pyperclip.copy(previous)
-            except Exception:
-                pass
-
-        threading.Thread(target=restore, daemon=True).start()
 
 
 class Vozdoo:
