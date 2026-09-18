@@ -1,6 +1,10 @@
 import sys
 from pathlib import Path
 
+import pytest
+
+pytest.importorskip("tkinter")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from pynput import keyboard as pkb

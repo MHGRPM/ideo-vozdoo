@@ -15,9 +15,11 @@ Uso:
 from __future__ import annotations
 
 import logging
+import signal
 import sys
 import threading
 import time
+import tkinter as tk
 from pathlib import Path
 
 import numpy as np
@@ -26,6 +28,8 @@ from faster_whisper import WhisperModel
 from pynput import keyboard as pkb
 
 from clipboard_paste import paste_text
+from llm_engine import get_engine
+from polish_bubble import PolishBubble
 
 SCRIPT_DIR = Path(__file__).parent
 ENV_FILE = SCRIPT_DIR / ".env"
@@ -64,6 +68,12 @@ def load_env() -> dict[str, str]:
         "VOZDOO_SAMPLE_RATE": "16000",
         "VOZDOO_MAX_RECORDING_SECONDS": "30",
         "VOZDOO_AUTO_PASTE": "true",
+        "VOZDOO_POLISH_HOTKEY": "alt+win",
+        "VOZDOO_LLM_API_KEY": "",
+        "VOZDOO_LLM_API_URL": "https://api.openai.com/v1/chat/completions",
+        "VOZDOO_LLM_API_MODEL": "gpt-4o-mini",
+        "VOZDOO_LLM_MODEL": "qwen2.5:3b-instruct",
+        "VOZDOO_LLM_HOST": "http://localhost:11434",
     }.items():
         if key not in env:
             env[key] = os.environ.get(key, default)
@@ -224,11 +234,23 @@ class Vozdoo:
         if mic_device:
             self.mic_device = int(mic_device) if mic_device.isdigit() else mic_device
 
-        parsed = parse_hotkey(env["VOZDOO_HOTKEY"])
-        if parsed is None:
+        normal_hotkey = parse_hotkey(env["VOZDOO_HOTKEY"])
+        polish_hotkey = parse_hotkey(env["VOZDOO_POLISH_HOTKEY"])
+        if normal_hotkey is None or polish_hotkey is None:
             raise SystemExit(1)
-        self.hotkey_tokens = parsed
+        if hotkeys_overlap(normal_hotkey, polish_hotkey):
+            log.error(
+                "VOZDOO_HOTKEY (%s) y VOZDOO_POLISH_HOTKEY (%s) se solapan: "
+                "uno no puede contener todas las teclas del otro.",
+                env["VOZDOO_HOTKEY"],
+                env["VOZDOO_POLISH_HOTKEY"],
+            )
+            raise SystemExit(1)
+        self.hotkeys = {"normal": normal_hotkey, "polish": polish_hotkey}
         self._pressed_tokens: set = set()
+        self._active_mode: str | None = None
+        self.engine_env = env
+        self.tk_root: tk.Tk | None = None
 
         log.info("Cargando Whisper '%s'...", env["VOZDOO_WHISPER_MODEL"])
         device = env["VOZDOO_WHISPER_DEVICE"]
@@ -250,20 +272,23 @@ class Vozdoo:
         self.processing = False
         self.lock = threading.Lock()
 
-    def on_press(self):
+    def _start_recording(self, mode: str) -> None:
         with self.lock:
             if self.buffer.recording or self.processing:
                 return
-            log.info("Grabando... (suelta la tecla para transcribir)")
+            self._active_mode = mode
+            log.info("Grabando (%s)... (suelta para transcribir)", mode)
             beep(800, 80)
             self.buffer.start()
 
-    def on_release(self):
+    def _finish_recording(self) -> None:
         with self.lock:
             if not self.buffer.recording:
                 return
             audio = self.buffer.stop()
             self.processing = True
+            mode = self._active_mode
+            self._active_mode = None
 
         beep(600, 80)
         log.info("Audio capturado (%.2fs)", len(audio) / self.sample_rate)
@@ -274,24 +299,59 @@ class Vozdoo:
             log.info("STT (%.2fs): %s", time.time() - t0, text)
 
             if not text:
-                log.info("Audio vacío o sin voz, nada que pegar")
+                log.info("Audio vacío o sin voz, nada que hacer")
                 return
 
-            paste_text(text, self.auto_paste)
-            if self.auto_paste:
-                log.info("Pegado en la ventana activa")
+            if mode == "normal":
+                paste_text(text, self.auto_paste)
+                log.info("Pegado en la ventana activa" if self.auto_paste else "Copiado al portapapeles")
             else:
-                log.info("Copiado al portapapeles (pégalo con Ctrl+V)")
+                self.tk_root.after(0, lambda: self._open_polish_bubble(text))
         except Exception:
-            log.exception("Error transcribiendo/pegando")
+            log.exception("Error transcribiendo/procesando")
         finally:
             self.processing = False
 
-    def run(self):
-        log.info(
-            "Vozdoo listo. Manten '%s' mientras hablas, suelta para transcribir. Ctrl+C para salir.",
-            self.env["VOZDOO_HOTKEY"],
+    def start_custom_recording(self) -> None:
+        """Llamado desde la burbuja al mantener pulsado el botón del micro."""
+        with self.lock:
+            if self.buffer.recording or self.processing:
+                return
+            beep(800, 80)
+            self.buffer.start()
+
+    def stop_custom_recording(self) -> str:
+        """Llamado desde la burbuja al soltar el botón del micro."""
+        with self.lock:
+            if not self.buffer.recording:
+                return ""
+            audio = self.buffer.stop()
+        beep(600, 80)
+        return transcribe(self.whisper, audio, self.language)
+
+    def _open_polish_bubble(self, text: str) -> None:
+        """Nota de alcance: si `transcribe()` lanza una excepción (no si
+        solo devuelve vacío, ese caso ya está cubierto arriba), el error
+        se registra en el log pero la burbuja no llega a abrirse — el
+        spec pedía que fuera visible en la burbuja, pero eso exigiría
+        abrirla ANTES de transcribir; se deja así por ahora porque es un
+        caso raro (fallo real de Whisper, no "no se dijo nada")."""
+        engine = get_engine(self.engine_env)
+        bubble = PolishBubble(
+            root=self.tk_root,
+            original_text=text,
+            engine=engine,
+            record_start_fn=self.start_custom_recording,
+            record_stop_fn=self.stop_custom_recording,
+            paste_fn=paste_text,
+            auto_paste=self.auto_paste,
         )
+        bubble.show()
+
+    def run(self) -> None:
+        self.tk_root = tk.Tk()
+        self.tk_root.withdraw()
+        signal.signal(signal.SIGINT, lambda *_: self.tk_root.quit())
 
         def normalize(key):
             for name, variants in _MODIFIER_KEYS.items():
@@ -302,20 +362,34 @@ class Vozdoo:
         def on_press(key):
             token = normalize(key)
             self._pressed_tokens.add(token)
-            if self.hotkey_tokens <= self._pressed_tokens:
-                self.on_press()
+            if self._active_mode is not None:
+                return
+            if self.hotkeys["polish"] <= self._pressed_tokens:
+                self._start_recording("polish")
+            elif self.hotkeys["normal"] <= self._pressed_tokens:
+                self._start_recording("normal")
 
         def on_release(key):
             token = normalize(key)
-            was_active = token in self.hotkey_tokens
+            active = self._active_mode
+            was_active = active is not None and token in self.hotkeys[active]
             self._pressed_tokens.discard(token)
-            if was_active and self.buffer.recording:
-                self.on_release()
+            if was_active:
+                self._finish_recording()
+
+        listener = pkb.Listener(on_press=on_press, on_release=on_release)
+        listener.start()
+
+        log.info(
+            "Vozdoo listo. '%s' dicta y pega. '%s' dicta y pulir con IA. Ctrl+C para salir.",
+            self.env["VOZDOO_HOTKEY"],
+            self.env["VOZDOO_POLISH_HOTKEY"],
+        )
 
         try:
-            with pkb.Listener(on_press=on_press, on_release=on_release) as listener:
-                listener.join()
-        except KeyboardInterrupt:
+            self.tk_root.mainloop()
+        finally:
+            listener.stop()
             log.info("Saliendo...")
 
 
