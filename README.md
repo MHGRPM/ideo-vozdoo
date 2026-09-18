@@ -1,0 +1,107 @@
+# Dictado por voz local (Whisper)
+
+Dictado tipo WisprFlow, pero gratis y 100% local: mantienes pulsada una
+tecla, hablas, sueltas, y el texto transcrito se pega donde tengas el
+cursor (o se copia al portapapeles).
+
+Nada sale de tu ordenador: la transcripción corre en local con
+[faster-whisper](https://github.com/SYSTAN/faster-whisper). No hay claves
+de API, no hay nube, no hay coste por uso.
+
+Extraído de JARBOO (el asistente de voz interno), quedándonos solo con la
+parte de "escuchar y escribir" — sin el LLM ni la voz clonada que tenía el
+original, para que cualquiera lo pueda usar tal cual.
+
+## Instalación
+
+Requiere Python 3.10+.
+
+**Windows:**
+```powershell
+.\start-dictado.ps1
+```
+
+**Linux / Mac:**
+```bash
+./start-dictado.sh
+```
+
+El script crea el entorno virtual, instala dependencias y copia
+`.env.example` a `.env` la primera vez. Luego arranca el dictado.
+
+La primerísima vez tardará ~30-60s descargando el modelo Whisper `small`
+(244MB) a `~/.cache/huggingface/`. Las siguientes veces es instantáneo.
+
+### Linux: portapapeles
+
+`pyperclip` necesita una utilidad de portapapeles del sistema. Si el copiar
+al portapapeles falla, instala una:
+```bash
+sudo apt install xclip     # o: sudo apt install xsel
+```
+En Wayland: `wl-clipboard`.
+
+## Uso
+
+1. Mantén pulsados **Ctrl + Win** (por defecto)
+2. Habla
+3. Suelta
+4. El texto aparece pegado donde tuvieras el cursor (o en el portapapeles,
+   según `DICTADO_AUTO_PASTE`)
+
+## Configuración (`.env`)
+
+| Variable | Por defecto | Qué hace |
+|---|---|---|
+| `DICTADO_HOTKEY` | `ctrl+win` | Tecla o combo (`ctrl+alt+d`, `f9`...) |
+| `DICTADO_WHISPER_MODEL` | `small` | `tiny`/`base`/`small`/`medium`/`large-v3` |
+| `DICTADO_WHISPER_LANGUAGE` | `es` | Idioma forzado |
+| `DICTADO_WHISPER_DEVICE` | `auto` | `auto`/`cpu`/`cuda` |
+| `DICTADO_MIC_DEVICE` | (vacío) | Índice de micro, ver `list_devices.py` |
+| `DICTADO_MAX_RECORDING_SECONDS` | `30` | Corte automático |
+| `DICTADO_AUTO_PASTE` | `true` | `false` = solo copia, no pega solo |
+
+Si tu micro por defecto no es el correcto, ejecuta:
+```bash
+python list_devices.py
+```
+y pon el número que te interese en `DICTADO_MIC_DEVICE`.
+
+## Notas sobre el modelo
+
+- `small` (244MB) va bien en CPU en portátiles normales.
+- Si tienes GPU NVIDIA con drivers CUDA 12.x, `DICTADO_WHISPER_DEVICE=cuda`
+  baja la latencia notablemente. Si tu CUDA es 13.x puede fallar
+  (`cublas64_12.dll`) — el script cae solo a CPU en ese caso.
+- Si notáis errores de transcripción con nombres propios o jerga interna,
+  subid a `medium` — más lento pero más preciso.
+
+## Qué se corrigió respecto al original (JARBOO)
+
+El código original definía por defecto un hotkey combinado
+(`ctrl+windows+j`) pero el parser solo soportaba teclas sueltas (F1-F12 o
+`space`/`enter`/etc.) — con esa config por defecto el programa no arrancaba
+("Hotkey no soportado"). Aquí el parser soporta combos reales, incluidos
+los que son solo modificadores sin ninguna tecla normal detrás (como el
+`ctrl+win` que usamos de default): se dispara al tener pulsadas todas las
+teclas del combo a la vez, y se corta al soltar cualquiera de ellas. También
+funcionan combos con letra (`ctrl+alt+d`) o teclas sueltas (`f9`), por si
+alguien prefiere cambiarlo en su `.env`.
+
+## Posibles mejoras futuras (no aplicadas, para valorar)
+
+- **Bandeja del sistema / icono de estado**: ahora mismo corre en una
+  ventana de terminal. Un icono en la bandeja (Windows/Linux) con
+  indicador de "grabando" sería más cómodo para uso diario.
+- **Autoarranque**: registrar como tarea programada / servicio de usuario
+  para que arranque solo al iniciar sesión.
+- **Modelo compartido pre-descargado**: si se instala en varios equipos
+  del equipo, descargar el modelo una vez y distribuirlo (o usar un share
+  de red) ahorra esos 244MB por persona.
+- **Vocabulario propio**: `faster-whisper` acepta un `initial_prompt` con
+  términos frecuentes (nombres de clientes, jerga Odoo/Boomatik) para
+  mejorar precisión en esas palabras.
+- **Push-to-talk vs. wake word**: esto es solo push-to-talk (mantener
+  pulsado). Si alguien quiere manos libres real, la Fase 2 de JARBOO
+  (`isair/jarvis` + Ollama) añade wake word, pero es un proyecto aparte
+  con más piezas (Ollama, modelo local de lenguaje, etc.), no solo Whisper.
