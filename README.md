@@ -24,7 +24,7 @@ cd ideo-vozdoo
 
 *Linux* — abre una terminal y pega esto, línea por línea:
 ```bash
-sudo apt install python3 python3-venv python3-pip git libportaudio2 xclip
+sudo apt install python3 python3-venv python3-pip python3-tk git libportaudio2 xclip
 git clone https://github.com/MHGRPM/ideo-vozdoo.git
 cd ideo-vozdoo
 ./start-vozdoo.sh
@@ -81,7 +81,7 @@ Si falta alguno, instálalo primero según tu sistema:
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv python3-pip git libportaudio2
+sudo apt install python3 python3-venv python3-pip python3-tk git libportaudio2
 ```
 
 - `python3-venv` es imprescindible: sin él, el script falla al crear el
@@ -167,6 +167,24 @@ cerrarla.
 Para volver a arrancarlo otro día, repite el mismo comando
 (`./start-vozdoo.sh` o `.\start-vozdoo.ps1`) desde dentro de la carpeta
 `ideo-vozdoo`.
+
+---
+
+## Dictar + pulir con IA (opcional)
+
+Además del dictado normal (`Ctrl + Win`), hay un segundo hotkey,
+**Alt + Win** por defecto, que abre una burbuja para reescribir el texto
+con IA antes de pegarlo: más formal, mejorar un prompt, corregir, resumir,
+o una instrucción tuya dicha por voz.
+
+Por defecto usa un modelo de IA local (Ollama) — si no lo tienes
+instalado, la burbuja te ofrece instalarlo con un clic. Si prefieres usar
+tu propia clave de API (OpenAI o Gemini), configúrala en `.env`
+(`VOZDOO_LLM_API_KEY`) y se usará esa en su lugar, sin necesidad de
+Ollama.
+
+Este hotkey es totalmente opcional: si no lo usas nunca, no afecta en
+nada al dictado normal.
 
 ---
 
