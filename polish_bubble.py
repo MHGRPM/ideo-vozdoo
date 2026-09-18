@@ -4,10 +4,14 @@ texto dictado, revisar el resultado y pegarlo."""
 from __future__ import annotations
 
 import logging
+import sys
+import threading
+import time
 import tkinter as tk
 from tkinter import scrolledtext
 from typing import Callable
 
+import ollama_setup
 from llm_engine import LLMEngine
 
 log = logging.getLogger("vozdoo")
@@ -148,6 +152,72 @@ class PolishBubble:
         tk.Button(button_row, text="Descartar", command=self.window.destroy).pack(
             side="left", expand=True, fill="x"
         )
+
+    def _start_ollama_install(self) -> None:
+        self._clear()
+        self.status_label = tk.Label(
+            self.window, text="Instalando Ollama...", wraplength=360, justify="left"
+        )
+        self.status_label.pack(padx=10, pady=20)
+        threading.Thread(target=self._run_ollama_install, daemon=True).start()
+
+    def _set_status(self, text: str) -> None:
+        self.window.after(0, lambda: self.status_label.configure(text=text))
+
+    def _finish_install_with_retry(self, text: str) -> None:
+        def render():
+            self.status_label.configure(text=text)
+            tk.Button(
+                self.window, text="Reintentar", command=self._render_choose_action
+            ).pack(fill="x", padx=10, pady=(6, 10))
+
+        self.window.after(0, render)
+
+    def _run_ollama_install(self) -> None:
+        host = self.engine.host
+        model = self.engine.model
+        try:
+            if sys.platform == "win32":
+                import os
+                import tempfile
+
+                dest = os.path.join(tempfile.gettempdir(), "OllamaSetup.exe")
+                self._set_status("Descargando instalador de Ollama...")
+                ollama_setup.download_windows_installer(dest)
+                self._set_status(
+                    "Abriendo el instalador de Ollama — sigue el asistente y "
+                    "cuando termine, vuelve aquí y pulsa Reintentar."
+                )
+                ollama_setup.launch_windows_installer(dest)
+                self._finish_install_with_retry(
+                    "Instalador abierto. Cuando termines, pulsa Reintentar."
+                )
+                return
+
+            self._set_status(
+                "Abriendo una terminal para instalar Ollama "
+                "(puede pedirte tu contraseña)..."
+            )
+            proc = ollama_setup.run_install_linux_mac()
+            proc.wait()
+
+            self._set_status("Comprobando que Ollama arrancó...")
+            for _ in range(30):
+                if ollama_setup.is_ollama_running(host):
+                    break
+                time.sleep(1)
+            else:
+                self._finish_install_with_retry(
+                    "Ollama no respondió tras instalar. Pulsa Reintentar."
+                )
+                return
+
+            self._set_status(f"Descargando modelo {model} (puede tardar unos minutos)...")
+            ollama_setup.pull_model(host, model, on_progress=self._set_status)
+            self._finish_install_with_retry("Listo. Pulsa Reintentar para usarlo.")
+        except Exception as exc:
+            log.exception("Error instalando Ollama")
+            self._finish_install_with_retry(f"Error instalando Ollama: {exc}")
 
     def _paste_and_close(self, text: str) -> None:
         self.paste_fn(text, self.auto_paste)
