@@ -5,9 +5,8 @@ transcrito se copia al portapapeles y (opcional) se pega automáticamente
 donde tengas el cursor. 100% local, sin APIs de pago, sustituto de
 herramientas tipo WisprFlow.
 
-Extraído y simplificado de JARBOO (asistente de voz interno de Marc):
-aquí solo queda la parte de captura de audio + Whisper + inserción de
-texto. Sin LLM, sin voz clonada, sin nada personalizado.
+Sin LLM, sin voz clonada, sin nada personalizado: solo captura de audio +
+Whisper + inserción de texto.
 
 Uso:
     python dictado_core.py

@@ -8,9 +8,7 @@ Nada sale de tu ordenador: la transcripción corre en local con
 [faster-whisper](https://github.com/SYSTAN/faster-whisper). No hay claves
 de API, no hay nube, no hay coste por uso.
 
-Extraído de JARBOO (el asistente de voz interno), quedándonos solo con la
-parte de "escuchar y escribir" — sin el LLM ni la voz clonada que tenía el
-original, para que cualquiera lo pueda usar tal cual.
+Sin LLM, sin asistente, sin nada más: solo escucha y escribe lo que dices.
 
 ## Instalación
 
@@ -76,17 +74,13 @@ y pon el número que te interese en `DICTADO_MIC_DEVICE`.
 - Si notáis errores de transcripción con nombres propios o jerga interna,
   subid a `medium` — más lento pero más preciso.
 
-## Qué se corrigió respecto al original (JARBOO)
+## Sobre el hotkey
 
-El código original definía por defecto un hotkey combinado
-(`ctrl+windows+j`) pero el parser solo soportaba teclas sueltas (F1-F12 o
-`space`/`enter`/etc.) — con esa config por defecto el programa no arrancaba
-("Hotkey no soportado"). Aquí el parser soporta combos reales, incluidos
-los que son solo modificadores sin ninguna tecla normal detrás (como el
-`ctrl+win` que usamos de default): se dispara al tener pulsadas todas las
-teclas del combo a la vez, y se corta al soltar cualquiera de ellas. También
-funcionan combos con letra (`ctrl+alt+d`) o teclas sueltas (`f9`), por si
-alguien prefiere cambiarlo en su `.env`.
+El parser soporta tanto combos hechos solo de teclas modificadoras (como
+el `ctrl+win` que usamos de default: se dispara al tener las dos pulsadas
+a la vez y se corta al soltar cualquiera) como combos con una letra
+(`ctrl+alt+d`) o teclas sueltas (`f9`), por si prefieres cambiarlo en tu
+`.env`.
 
 ## Posibles mejoras futuras (no aplicadas, para valorar)
 
@@ -99,9 +93,9 @@ alguien prefiere cambiarlo en su `.env`.
   del equipo, descargar el modelo una vez y distribuirlo (o usar un share
   de red) ahorra esos 244MB por persona.
 - **Vocabulario propio**: `faster-whisper` acepta un `initial_prompt` con
-  términos frecuentes (nombres de clientes, jerga Odoo/Boomatik) para
+  términos frecuentes (nombres propios, jerga interna del equipo) para
   mejorar precisión en esas palabras.
 - **Push-to-talk vs. wake word**: esto es solo push-to-talk (mantener
-  pulsado). Si alguien quiere manos libres real, la Fase 2 de JARBOO
-  (`isair/jarvis` + Ollama) añade wake word, pero es un proyecto aparte
-  con más piezas (Ollama, modelo local de lenguaje, etc.), no solo Whisper.
+  pulsado). Manos libres con palabra de activación ("wake word") es un
+  proyecto aparte, con más piezas (reconocimiento always-on, un modelo de
+  lenguaje local, etc.), no solo Whisper.
