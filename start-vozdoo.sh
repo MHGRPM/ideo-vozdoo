@@ -16,4 +16,4 @@ if [ ! -f ".env" ]; then
     echo "Creado .env con valores por defecto. Editalo si quieres cambiar la tecla o el modelo."
 fi
 
-python dictado_core.py
+python vozdoo_core.py

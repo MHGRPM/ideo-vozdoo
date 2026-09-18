@@ -1,4 +1,4 @@
-"""Dictado por voz local con Whisper (faster-whisper).
+"""Vozdoo: dictado por voz local con Whisper (faster-whisper).
 
 Mantén pulsada la tecla/combo configurada, habla, suelta -> el texto
 transcrito se copia al portapapeles y (opcional) se pega automáticamente
@@ -9,7 +9,7 @@ Sin LLM, sin voz clonada, sin nada personalizado: solo captura de audio +
 Whisper + inserción de texto.
 
 Uso:
-    python dictado_core.py
+    python vozdoo_core.py
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from pynput import keyboard as pkb
 
 SCRIPT_DIR = Path(__file__).parent
 ENV_FILE = SCRIPT_DIR / ".env"
-LOG_FILE = SCRIPT_DIR / "dictado.log"
+LOG_FILE = SCRIPT_DIR / "vozdoo.log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +40,7 @@ logging.basicConfig(
 )
 for noisy in ("huggingface_hub", "faster_whisper"):
     logging.getLogger(noisy).setLevel(logging.WARNING)
-log = logging.getLogger("dictado")
+log = logging.getLogger("vozdoo")
 
 
 def load_env() -> dict[str, str]:
@@ -55,14 +55,14 @@ def load_env() -> dict[str, str]:
             key, _, value = line.partition("=")
             env[key.strip()] = value.strip().strip('"').strip("'")
     for key, default in {
-        "DICTADO_HOTKEY": "ctrl+win",
-        "DICTADO_WHISPER_MODEL": "small",
-        "DICTADO_WHISPER_LANGUAGE": "es",
-        "DICTADO_WHISPER_DEVICE": "auto",
-        "DICTADO_MIC_DEVICE": "",
-        "DICTADO_SAMPLE_RATE": "16000",
-        "DICTADO_MAX_RECORDING_SECONDS": "30",
-        "DICTADO_AUTO_PASTE": "true",
+        "VOZDOO_HOTKEY": "ctrl+win",
+        "VOZDOO_WHISPER_MODEL": "small",
+        "VOZDOO_WHISPER_LANGUAGE": "es",
+        "VOZDOO_WHISPER_DEVICE": "auto",
+        "VOZDOO_MIC_DEVICE": "",
+        "VOZDOO_SAMPLE_RATE": "16000",
+        "VOZDOO_MAX_RECORDING_SECONDS": "30",
+        "VOZDOO_AUTO_PASTE": "true",
     }.items():
         if key not in env:
             env[key] = os.environ.get(key, default)
@@ -244,30 +244,30 @@ def paste_text(text: str, auto_paste: bool) -> None:
         threading.Thread(target=restore, daemon=True).start()
 
 
-class Dictado:
+class Vozdoo:
     def __init__(self, env: dict[str, str]):
         self.env = env
-        self.sample_rate = int(env["DICTADO_SAMPLE_RATE"])
-        self.max_seconds = int(env["DICTADO_MAX_RECORDING_SECONDS"])
-        self.language = env["DICTADO_WHISPER_LANGUAGE"]
-        self.auto_paste = env["DICTADO_AUTO_PASTE"].lower() == "true"
-        mic_device = env.get("DICTADO_MIC_DEVICE", "").strip()
+        self.sample_rate = int(env["VOZDOO_SAMPLE_RATE"])
+        self.max_seconds = int(env["VOZDOO_MAX_RECORDING_SECONDS"])
+        self.language = env["VOZDOO_WHISPER_LANGUAGE"]
+        self.auto_paste = env["VOZDOO_AUTO_PASTE"].lower() == "true"
+        mic_device = env.get("VOZDOO_MIC_DEVICE", "").strip()
         self.mic_device: str | int | None = None
         if mic_device:
             self.mic_device = int(mic_device) if mic_device.isdigit() else mic_device
 
-        parsed = parse_hotkey(env["DICTADO_HOTKEY"])
+        parsed = parse_hotkey(env["VOZDOO_HOTKEY"])
         if parsed is None:
             raise SystemExit(1)
         self.hotkey_tokens = parsed
         self._pressed_tokens: set = set()
 
-        log.info("Cargando Whisper '%s'...", env["DICTADO_WHISPER_MODEL"])
-        device = env["DICTADO_WHISPER_DEVICE"]
+        log.info("Cargando Whisper '%s'...", env["VOZDOO_WHISPER_MODEL"])
+        device = env["VOZDOO_WHISPER_DEVICE"]
         compute_type = "int8" if device in ("cpu", "auto") else "float16"
         try:
             self.whisper = WhisperModel(
-                env["DICTADO_WHISPER_MODEL"],
+                env["VOZDOO_WHISPER_MODEL"],
                 device="cpu" if device == "auto" else device,
                 compute_type=compute_type,
             )
@@ -275,7 +275,7 @@ class Dictado:
         except Exception as exc:  # noqa: BLE001
             log.warning("Whisper %s falló (%s), fallback CPU int8", device, exc)
             self.whisper = WhisperModel(
-                env["DICTADO_WHISPER_MODEL"], device="cpu", compute_type="int8"
+                env["VOZDOO_WHISPER_MODEL"], device="cpu", compute_type="int8"
             )
 
         self.buffer = AudioBuffer(self.sample_rate, self.max_seconds, self.mic_device)
@@ -321,8 +321,8 @@ class Dictado:
 
     def run(self):
         log.info(
-            "Dictado listo. Manten '%s' mientras hablas, suelta para transcribir. Ctrl+C para salir.",
-            self.env["DICTADO_HOTKEY"],
+            "Vozdoo listo. Manten '%s' mientras hablas, suelta para transcribir. Ctrl+C para salir.",
+            self.env["VOZDOO_HOTKEY"],
         )
 
         def normalize(key):
@@ -353,8 +353,8 @@ class Dictado:
 
 def main() -> int:
     env = load_env()
-    dictado = Dictado(env)
-    dictado.run()
+    vozdoo = Vozdoo(env)
+    vozdoo.run()
     return 0
 
 

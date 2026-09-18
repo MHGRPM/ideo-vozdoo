@@ -1,8 +1,8 @@
-# Dictado por voz local (Whisper)
+# Vozdoo
 
-Dictado tipo WisprFlow, pero gratis y 100% local: mantienes pulsada una
-tecla, hablas, sueltas, y el texto transcrito se pega donde tengas el
-cursor (o se copia al portapapeles).
+Dictado por voz local, tipo WisprFlow pero gratis y 100% local: mantienes
+pulsada una tecla, hablas, sueltas, y el texto transcrito se pega donde
+tengas el cursor (o se copia al portapapeles).
 
 Nada sale de tu ordenador: la transcripción corre en local con
 [faster-whisper](https://github.com/SYSTAN/faster-whisper). No hay claves
@@ -16,16 +16,16 @@ Requiere Python 3.10+.
 
 **Windows:**
 ```powershell
-.\start-dictado.ps1
+.\start-vozdoo.ps1
 ```
 
 **Linux / Mac:**
 ```bash
-./start-dictado.sh
+./start-vozdoo.sh
 ```
 
 El script crea el entorno virtual, instala dependencias y copia
-`.env.example` a `.env` la primera vez. Luego arranca el dictado.
+`.env.example` a `.env` la primera vez. Luego arranca Vozdoo.
 
 La primerísima vez tardará ~30-60s descargando el modelo Whisper `small`
 (244MB) a `~/.cache/huggingface/`. Las siguientes veces es instantáneo.
@@ -45,30 +45,30 @@ En Wayland: `wl-clipboard`.
 2. Habla
 3. Suelta
 4. El texto aparece pegado donde tuvieras el cursor (o en el portapapeles,
-   según `DICTADO_AUTO_PASTE`)
+   según `VOZDOO_AUTO_PASTE`)
 
 ## Configuración (`.env`)
 
 | Variable | Por defecto | Qué hace |
 |---|---|---|
-| `DICTADO_HOTKEY` | `ctrl+win` | Tecla o combo (`ctrl+alt+d`, `f9`...) |
-| `DICTADO_WHISPER_MODEL` | `small` | `tiny`/`base`/`small`/`medium`/`large-v3` |
-| `DICTADO_WHISPER_LANGUAGE` | `es` | Idioma forzado |
-| `DICTADO_WHISPER_DEVICE` | `auto` | `auto`/`cpu`/`cuda` |
-| `DICTADO_MIC_DEVICE` | (vacío) | Índice de micro, ver `list_devices.py` |
-| `DICTADO_MAX_RECORDING_SECONDS` | `30` | Corte automático |
-| `DICTADO_AUTO_PASTE` | `true` | `false` = solo copia, no pega solo |
+| `VOZDOO_HOTKEY` | `ctrl+win` | Tecla o combo (`ctrl+alt+d`, `f9`...) |
+| `VOZDOO_WHISPER_MODEL` | `small` | `tiny`/`base`/`small`/`medium`/`large-v3` |
+| `VOZDOO_WHISPER_LANGUAGE` | `es` | Idioma forzado |
+| `VOZDOO_WHISPER_DEVICE` | `auto` | `auto`/`cpu`/`cuda` |
+| `VOZDOO_MIC_DEVICE` | (vacío) | Índice de micro, ver `list_devices.py` |
+| `VOZDOO_MAX_RECORDING_SECONDS` | `30` | Corte automático |
+| `VOZDOO_AUTO_PASTE` | `true` | `false` = solo copia, no pega solo |
 
 Si tu micro por defecto no es el correcto, ejecuta:
 ```bash
 python list_devices.py
 ```
-y pon el número que te interese en `DICTADO_MIC_DEVICE`.
+y pon el número que te interese en `VOZDOO_MIC_DEVICE`.
 
 ## Notas sobre el modelo
 
 - `small` (244MB) va bien en CPU en portátiles normales.
-- Si tienes GPU NVIDIA con drivers CUDA 12.x, `DICTADO_WHISPER_DEVICE=cuda`
+- Si tienes GPU NVIDIA con drivers CUDA 12.x, `VOZDOO_WHISPER_DEVICE=cuda`
   baja la latencia notablemente. Si tu CUDA es 13.x puede fallar
   (`cublas64_12.dll`) — el script cae solo a CPU en ese caso.
 - Si notáis errores de transcripción con nombres propios o jerga interna,
