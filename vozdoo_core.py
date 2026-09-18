@@ -202,6 +202,15 @@ def parse_hotkey(spec: str):
     return frozenset(tokens)
 
 
+def hotkeys_overlap(a: frozenset, b: frozenset) -> bool:
+    """True si uno de los dos combos contiene todas las teclas del otro.
+
+    Si eso pasa, pulsar el combo largo dispara el corto a medio camino
+    según el orden de pulsación. Ver spec 2026-09-18-polish-bubble-design.
+    """
+    return a <= b or b <= a
+
+
 def paste_text(text: str, auto_paste: bool) -> None:
     """Copia el texto al portapapeles y, si auto_paste, simula Ctrl+V.
 
