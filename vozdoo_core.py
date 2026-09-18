@@ -19,7 +19,6 @@ import signal
 import sys
 import threading
 import time
-import tkinter as tk
 from pathlib import Path
 
 import numpy as np
@@ -29,7 +28,17 @@ from pynput import keyboard as pkb
 
 from clipboard_paste import paste_text
 from llm_engine import get_engine
-from polish_bubble import PolishBubble
+
+try:
+    import tkinter as tk
+    from polish_bubble import PolishBubble
+except ImportError:
+    # Falta el paquete de sistema python3-tk (no instalable vía pip). El
+    # dictado normal (Ctrl+Win) no depende de tkinter, así que no debe
+    # tumbar el import de todo el módulo: solo se pierde el hotkey de
+    # pulir con IA (Alt+Win), ver Vozdoo.run().
+    tk = None
+    PolishBubble = None
 
 SCRIPT_DIR = Path(__file__).parent
 ENV_FILE = SCRIPT_DIR / ".env"
@@ -114,7 +123,6 @@ class AudioBuffer:
 
     def start(self):
         self.chunks = []
-        self.recording = True
         self.stream = sd.InputStream(
             samplerate=self.sample_rate,
             channels=1,
@@ -123,6 +131,11 @@ class AudioBuffer:
             callback=self._callback,
         )
         self.stream.start()
+        # Solo marcamos "grabando" una vez el stream existe y arrancó: si
+        # la construcción o el start() fallan (p.ej. PortAudioError con un
+        # micro inválido), no queremos dejar el buffer en recording=True
+        # sin stream real detrás.
+        self.recording = True
 
     def stop(self) -> np.ndarray:
         self.recording = False
@@ -305,6 +318,12 @@ class Vozdoo:
             if mode == "normal":
                 paste_text(text, self.auto_paste)
                 log.info("Pegado en la ventana activa" if self.auto_paste else "Copiado al portapapeles")
+            elif self.tk_root is None:
+                log.warning(
+                    "No se puede abrir la burbuja de pulido: falta tkinter "
+                    "(instala python3-tk). Texto transcrito: %s",
+                    text,
+                )
             else:
                 self.tk_root.after(0, lambda: self._open_polish_bubble(text))
         except Exception:
@@ -326,8 +345,12 @@ class Vozdoo:
             if not self.buffer.recording:
                 return ""
             audio = self.buffer.stop()
+            self.processing = True
         beep(600, 80)
-        return transcribe(self.whisper, audio, self.language)
+        try:
+            return transcribe(self.whisper, audio, self.language)
+        finally:
+            self.processing = False
 
     def _open_polish_bubble(self, text: str) -> None:
         """Nota de alcance: si `transcribe()` lanza una excepción (no si
@@ -349,9 +372,17 @@ class Vozdoo:
         bubble.show()
 
     def run(self) -> None:
-        self.tk_root = tk.Tk()
-        self.tk_root.withdraw()
-        signal.signal(signal.SIGINT, lambda *_: self.tk_root.quit())
+        tk_available = tk is not None
+        if tk_available:
+            self.tk_root = tk.Tk()
+            self.tk_root.withdraw()
+            signal.signal(signal.SIGINT, lambda *_: self.tk_root.quit())
+        else:
+            log.warning(
+                "tkinter no disponible (falta el paquete python3-tk) — el "
+                "hotkey de pulir con IA (Alt+Win) no estará disponible, pero "
+                "el dictado normal (Ctrl+Win) sigue funcionando"
+            )
 
         def normalize(key):
             for name, variants in _MODIFIER_KEYS.items():
@@ -360,25 +391,33 @@ class Vozdoo:
             return key
 
         def on_press(key):
-            token = normalize(key)
-            self._pressed_tokens.add(token)
-            if self._active_mode is not None:
-                return
-            if self.hotkeys["polish"] <= self._pressed_tokens:
-                self._start_recording("polish")
-            elif self.hotkeys["normal"] <= self._pressed_tokens:
-                self._start_recording("normal")
+            try:
+                token = normalize(key)
+                self._pressed_tokens.add(token)
+                if self._active_mode is not None:
+                    return
+                if self.hotkeys["polish"] <= self._pressed_tokens:
+                    self._start_recording("polish")
+                elif self.hotkeys["normal"] <= self._pressed_tokens:
+                    self._start_recording("normal")
+            except Exception:
+                # pynput solo relanza excepciones de los callbacks en
+                # .join(); sin este try/except un fallo aquí (p.ej. un
+                # PortAudioError al arrancar la grabación) mataría el hilo
+                # del listener en silencio y ambos hotkeys dejarían de
+                # responder para siempre sin ningún log.
+                log.exception("Error en on_press")
 
         def on_release(key):
-            token = normalize(key)
-            active = self._active_mode
-            was_active = active is not None and token in self.hotkeys[active]
-            self._pressed_tokens.discard(token)
-            if was_active:
-                self._finish_recording()
-
-        listener = pkb.Listener(on_press=on_press, on_release=on_release)
-        listener.start()
+            try:
+                token = normalize(key)
+                active = self._active_mode
+                was_active = active is not None and token in self.hotkeys[active]
+                self._pressed_tokens.discard(token)
+                if was_active:
+                    self._finish_recording()
+            except Exception:
+                log.exception("Error en on_release")
 
         log.info(
             "Vozdoo listo. '%s' dicta y pega. '%s' dicta y pulir con IA. Ctrl+C para salir.",
@@ -386,11 +425,23 @@ class Vozdoo:
             self.env["VOZDOO_POLISH_HOTKEY"],
         )
 
-        try:
-            self.tk_root.mainloop()
-        finally:
-            listener.stop()
-            log.info("Saliendo...")
+        if tk_available:
+            listener = pkb.Listener(on_press=on_press, on_release=on_release)
+            listener.start()
+            try:
+                self.tk_root.mainloop()
+            finally:
+                listener.stop()
+                log.info("Saliendo...")
+        else:
+            # Sin tkinter no hay mainloop que correr: comportamiento
+            # original de antes de la burbuja de pulido, preservado tal
+            # cual para no alterar en nada el hotkey de dictado normal.
+            try:
+                with pkb.Listener(on_press=on_press, on_release=on_release) as listener:
+                    listener.join()
+            except KeyboardInterrupt:
+                log.info("Saliendo...")
 
 
 def main() -> int:

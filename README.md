@@ -144,7 +144,7 @@ El script hace 4 cosas, y va imprimiendo en qué paso está:
 4. `==> Arrancando Vozdoo...` — descarga el modelo de voz (~244MB) la
    primera vez (otro medio minuto), luego arranca. Cuando veas:
    ```
-   Vozdoo listo. Manten 'ctrl+win' mientras hablas, suelta para transcribir. Ctrl+C para salir.
+   Vozdoo listo. 'ctrl+win' dicta y pega. 'alt+win' dicta y pulir con IA. Ctrl+C para salir.
    ```
    ya está listo para usar.
 
@@ -203,6 +203,12 @@ valores:
 | `VOZDOO_MIC_DEVICE` | (vacío) | Índice de micro, ver `list_devices.py` |
 | `VOZDOO_MAX_RECORDING_SECONDS` | `30` | Corte automático |
 | `VOZDOO_AUTO_PASTE` | `true` | `false` = solo copia, no pega solo |
+| `VOZDOO_POLISH_HOTKEY` | `alt+win` | Tecla o combo para "dictar y pulir con IA" |
+| `VOZDOO_LLM_API_KEY` | (vacío) | Si la rellenas, se usa tu API en vez de Ollama local |
+| `VOZDOO_LLM_API_URL` | `https://api.openai.com/v1/chat/completions` | Endpoint de la API (OpenAI, Gemini vía capa de compatibilidad...) |
+| `VOZDOO_LLM_API_MODEL` | `gpt-4o-mini` | Modelo a usar con la API key |
+| `VOZDOO_LLM_MODEL` | `qwen2.5:3b-instruct` | Modelo de Ollama local (si no hay API key) |
+| `VOZDOO_LLM_HOST` | `http://localhost:11434` | URL de Ollama local |
 
 Si tu micro por defecto no es el correcto, con el entorno activado
 ejecuta:

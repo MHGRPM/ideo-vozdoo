@@ -11,8 +11,10 @@ import tkinter as tk
 from tkinter import scrolledtext
 from typing import Callable
 
+import requests
+
 import ollama_setup
-from llm_engine import LLMEngine
+from llm_engine import LLMEngine, OllamaEngine
 
 log = logging.getLogger("vozdoo")
 
@@ -52,10 +54,13 @@ class PolishBubble:
         self.paste_fn = paste_fn
         self.auto_paste = auto_paste
         self.window: tk.Toplevel | None = None
+        self._polish_cancelled = False
 
     def show(self) -> None:
         self.window = tk.Toplevel(self.root)
         self.window.title("Vozdoo — pulir")
+        x, y = self.root.winfo_pointerxy()
+        self.window.geometry(f"+{x + 20}+{y + 20}")
         self.window.attributes("-topmost", True)
         self._render_choose_action()
 
@@ -109,21 +114,61 @@ class PolishBubble:
 
     def _run_polish(self, instruction: str) -> None:
         self._clear()
-        tk.Label(self.window, text="Pensando...").pack(padx=10, pady=20)
-        self.window.update()
+        self._polish_cancelled = False
+        tk.Label(self.window, text="Pensando...").pack(padx=10, pady=(20, 6))
+        tk.Button(
+            self.window, text="Cancelar", command=self._cancel_polish
+        ).pack(fill="x", padx=10, pady=(0, 10))
+        threading.Thread(
+            target=self._run_polish_thread, args=(instruction,), daemon=True
+        ).start()
+
+    def _cancel_polish(self) -> None:
+        self._polish_cancelled = True
+        self._render_choose_action()
+
+    def _run_polish_thread(self, instruction: str) -> None:
+        """Corre en un hilo aparte para no bloquear la UI de Tk durante los
+        hasta 60s que puede tardar la llamada HTTP a `engine.polish()`.
+        Sigue el mismo patrón que `_run_ollama_install`/`_set_status`:
+        el hilo de fondo solo marshalla resultados a la UI vía
+        `self.window.after(0, ...)`, nunca toca widgets directamente."""
         try:
             result = self.engine.polish(self.original_text, instruction)
         except Exception as exc:
             log.exception("Error llamando al motor de IA")
-            self._render_error(str(exc))
+            if self._polish_cancelled:
+                return
+            message = self._polish_error_message(exc)
+            self.window.after(0, lambda: self._render_error(message))
             return
-        self._render_result(result)
+        if self._polish_cancelled:
+            return
+        self.window.after(0, lambda: self._render_result(result))
+
+    def _polish_error_message(self, exc: Exception) -> str:
+        """Mensaje amigable cuando Ollama está corriendo pero el modelo
+        configurado no se ha descargado (404 en /api/generate). Para
+        cualquier otro caso (incluye ApiKeyEngine, donde un 404 significa
+        una URL de API inválida, no un modelo sin descargar) se devuelve
+        el mensaje genérico de siempre."""
+        is_http_404 = (
+            isinstance(exc, requests.exceptions.HTTPError)
+            and getattr(exc, "response", None) is not None
+            and getattr(exc.response, "status_code", None) == 404
+        )
+        if is_http_404 and isinstance(self.engine, OllamaEngine) and hasattr(self.engine, "model"):
+            return (
+                f"El modelo '{self.engine.model}' no está descargado. "
+                f"Ejecuta en una terminal: ollama pull {self.engine.model}"
+            )
+        return str(exc)
 
     def _render_error(self, message: str) -> None:
         self._clear()
         tk.Label(
             self.window,
-            text=f"Error: {message}",
+            text=f"Error: {message} Revisa tu configuración en .env.",
             wraplength=360,
             justify="left",
             fg="red",

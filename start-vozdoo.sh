@@ -14,6 +14,8 @@ echo "==> Instalando dependencias (la primera vez puede tardar 1-3 minutos, desc
 pip install --upgrade pip
 pip install -r requirements.txt
 
+python3 -c "import tkinter" 2>/dev/null || echo "==> Aviso: falta python3-tk (Linux: sudo apt install python3-tk). El hotkey de pulir con IA (Alt+Win) no estará disponible, pero el dictado normal sí funciona."
+
 if [ ! -f ".env" ]; then
     cp .env.example .env
     echo "==> Creado .env con valores por defecto. Editalo si quieres cambiar la tecla o el modelo."

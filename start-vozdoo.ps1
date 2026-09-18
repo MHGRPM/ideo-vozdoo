@@ -13,6 +13,11 @@ Write-Host "==> Instalando dependencias (la primera vez puede tardar 1-3 minutos
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
+python -c "import tkinter" 2>$null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "==> Aviso: falta tkinter en tu instalación de Python. El hotkey de pulir con IA (Alt+Win) no estará disponible, pero el dictado normal sí funciona."
+}
+
 if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
     Write-Host "==> Creado .env con valores por defecto. Editalo si quieres cambiar la tecla o el modelo."

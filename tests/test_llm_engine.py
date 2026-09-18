@@ -79,8 +79,7 @@ def test_api_key_engine_is_available_is_always_true():
     assert engine.is_available() is True
 
 
-@patch("llm_engine.is_ollama_running", create=True)
-def test_ollama_engine_is_available_delegates_to_ollama_setup(_):
+def test_ollama_engine_is_available_delegates_to_ollama_setup():
     with patch("ollama_setup.is_ollama_running", return_value=True) as mock_check:
         engine = OllamaEngine(host="http://localhost:11434", model="m")
         assert engine.is_available() is True
