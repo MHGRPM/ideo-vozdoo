@@ -4,22 +4,11 @@ texto dictado, revisar el resultado y pegarlo."""
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable
+import tkinter as tk
+from tkinter import scrolledtext
+from typing import Callable
 
 from llm_engine import LLMEngine
-
-if TYPE_CHECKING:
-    import tkinter as tk
-    from tkinter import scrolledtext
-else:
-    try:
-        import tkinter as tk
-        from tkinter import scrolledtext
-    except ImportError:
-        # En entornos sin pantalla/tkinter disponible, el módulo puede importarse
-        # pero la clase PolishBubble no puede instanciarse
-        tk = None  # type: ignore
-        scrolledtext = None  # type: ignore
 
 log = logging.getLogger("vozdoo")
 
