@@ -33,7 +33,7 @@ Fuera de v1 (descartado explícitamente):
 
 ## Flujo
 
-1. Usuario mantiene pulsado `VOZDOO_POLISH_HOTKEY` (default `ctrl+alt+win`), habla, suelta.
+1. Usuario mantiene pulsado `VOZDOO_POLISH_HOTKEY` (default `alt+win`), habla, suelta.
 2. Se transcribe con el mismo pipeline de Whisper ya existente.
 3. Se abre la burbuja cerca del cursor:
    - Texto transcrito (solo lectura)
@@ -85,7 +85,7 @@ Fuera de v1 (descartado explícitamente):
 
 | Variable | Por defecto | Qué hace |
 |---|---|---|
-| `VOZDOO_POLISH_HOTKEY` | `ctrl+alt+win` | Hotkey de "dictar + pulir" |
+| `VOZDOO_POLISH_HOTKEY` | `alt+win` | Hotkey de "dictar + pulir" |
 | `VOZDOO_LLM_API_KEY` | (vacío) | Si se rellena, usa esta API en vez de Ollama |
 | `VOZDOO_LLM_API_URL` | endpoint de OpenAI | Cambiar para Gemini u otro proveedor compatible |
 | `VOZDOO_LLM_API_MODEL` | `gpt-4o-mini` | Modelo a usar en esa API |
@@ -107,8 +107,19 @@ Fuera de v1 (descartado explícitamente):
 - El auto-instalador de Ollama en Windows puede no ser 100% silencioso
   (ver arriba).
 - `tkinter` requiere una sesión gráfica (mismo requisito que ya existe
-  hoy para `pynput` — no añade una limitación nueva).
+  hoy para `pynput` — no añade una limitación nueva). En Linux,
+  `tkinter` es un paquete del sistema aparte (`python3-tk`), no viene
+  con `python3`/`python3-venv` — hay que añadirlo a los requisitos del
+  README.
 - El botón de instrucción personalizada por voz añade una segunda
   grabación de audio anidada dentro del flujo — hay que evitar
   colisiones con el `AudioBuffer` único que ya existe en
   `vozdoo_core.py` (se resuelve en el plan de implementación).
+- `VOZDOO_HOTKEY` y `VOZDOO_POLISH_HOTKEY` no pueden solaparse: si el
+  conjunto de teclas de uno contiene todas las del otro (p.ej.
+  `ctrl+win` dentro de `ctrl+alt+win`), pulsar el combo largo dispara
+  primero el corto a medio camino. Por eso el default de
+  `VOZDOO_POLISH_HOTKEY` es `alt+win` (no `ctrl+alt+win`): no comparte
+  todas las teclas de `ctrl+win` en ningún orden de pulsación. Se añade
+  una validación al arrancar que rechaza cualquier configuración donde
+  se solapen.
