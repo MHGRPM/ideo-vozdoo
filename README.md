@@ -11,6 +11,54 @@ nada más: solo escucha y escribe lo que dices.
 
 ---
 
+## Guía rápida
+
+**Instalar (solo la primera vez):**
+
+*Windows* — abre PowerShell y pega esto, línea por línea:
+```powershell
+git clone https://github.com/MHGRPM/ideo-vozdoo.git
+cd ideo-vozdoo
+.\start-vozdoo.ps1
+```
+
+*Linux* — abre una terminal y pega esto, línea por línea:
+```bash
+sudo apt install python3 python3-venv python3-pip git libportaudio2 xclip
+git clone https://github.com/MHGRPM/ideo-vozdoo.git
+cd ideo-vozdoo
+./start-vozdoo.sh
+```
+
+*Mac* — abre una terminal y pega esto, línea por línea:
+```bash
+brew install python3 portaudio git
+git clone https://github.com/MHGRPM/ideo-vozdoo.git
+cd ideo-vozdoo
+./start-vozdoo.sh
+```
+
+La primera vez tarda 2-3 minutos descargando cosas — es normal, deja que
+termine. Cuando veas el mensaje `Vozdoo listo...`, ya puedes usarlo.
+
+**Usar:**
+
+1. Mantén pulsado **Ctrl + Win**
+2. Habla
+3. Suelta
+4. El texto sale escrito donde tuvieras el cursor
+
+**Para pararlo:** `Ctrl+C` en esa misma ventana, o ciérrala.
+
+**Para volver a usarlo otro día:** abre una terminal, entra en la carpeta
+y vuelve a lanzar el mismo comando de instalación (`./start-vozdoo.sh` o
+`.\start-vozdoo.ps1`) — esta vez arranca en segundos.
+
+Si algo no funciona a la primera, sigue leyendo más abajo: está todo
+explicado con más detalle y con soluciones a los problemas más comunes.
+
+---
+
 ## 1. Antes de instalar (requisitos del sistema)
 
 Necesitas Python 3.10 o superior y `git`. Comprueba si ya los tienes:
