@@ -49,6 +49,7 @@ def test_ollama_engine_polish_calls_generate_endpoint(mock_post):
     payload = mock_post.call_args.kwargs["json"]
     assert payload["model"] == "qwen2.5:3b-instruct"
     assert payload["stream"] is False
+    assert payload["system"]
 
 
 @patch("llm_engine.requests.post")
@@ -71,7 +72,8 @@ def test_api_key_engine_polish_calls_chat_completions(mock_post):
     assert headers["Authorization"] == "Bearer sk-test"
     payload = mock_post.call_args.kwargs["json"]
     assert payload["model"] == "gpt-4o-mini"
-    assert payload["messages"][0]["role"] == "user"
+    assert payload["messages"][0]["role"] == "system"
+    assert payload["messages"][1]["role"] == "user"
 
 
 def test_api_key_engine_is_available_is_always_true():

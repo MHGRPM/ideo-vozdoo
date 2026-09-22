@@ -13,11 +13,13 @@ import threading
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
+import pyperclip
+
 from action_bubbles import ActionBubbles
 from clipboard_paste import paste_text
 from llm_engine import get_engine
 from orb_widget import OrbWidget
-from polish_actions import PRESET_INSTRUCTIONS
+from polish_actions import ACTIONS, ACTIONS_BY_LABEL
 from result_panel import ResultPanel
 
 log = logging.getLogger("vozdoo")
@@ -71,6 +73,26 @@ class OrbApp:
         self.bridge.hotkey_start.connect(self.start_dictation_from_hotkey)
         self.bridge.hotkey_stop.connect(self.stop_dictation_from_hotkey)
 
+        self._log_engine()
+
+    def _log_engine(self) -> None:
+        """Decir al arrancar si la IA esta lista evita la duda de "¿esto
+        tiene Ollama o no?" cuando una accion no responde."""
+        engine = get_engine(self.core.engine_env)
+        model = getattr(engine, "model", "?")
+        kind = "Ollama local" if hasattr(engine, "host") else "API propia"
+        try:
+            available = engine.is_available()
+        except Exception:
+            available = False
+        if available:
+            log.info("IA lista: %s, modelo %s", kind, model)
+        else:
+            log.warning(
+                "IA no disponible (%s, modelo %s). Las acciones de pulido "
+                "fallaran hasta que arranque.", kind, model
+            )
+
     # ------------------------------------------------------------------
     # Dictado
     # ------------------------------------------------------------------
@@ -112,29 +134,42 @@ class OrbApp:
             return
         self.pending_text = text
         log.info("Dictado: %s", text)
-        self._show_actions()
+        # Mantener pulsado hace lo mismo que el hotkey de dictado: escribe.
+        # Las acciones de IA viven en el boton derecho, que sigue teniendo
+        # este texto a mano por si lo quieres pulir despues.
+        self._paste(text)
 
     # ------------------------------------------------------------------
     # Mini-burbujas
     # ------------------------------------------------------------------
 
+    def _current_text(self) -> str:
+        """Sobre que texto actuan las acciones: lo ultimo dictado y, si no
+        hay nada, lo que haya en el portapapeles. Asi se puede copiar un
+        prompt de cualquier sitio, pulsar el boton derecho y mejorarlo sin
+        haber dictado nada."""
+        if self.pending_text:
+            return self.pending_text
+        try:
+            clip = (pyperclip.paste() or "").strip()
+        except Exception:
+            return ""
+        return clip if 0 < len(clip) <= 8000 else ""
+
     def _show_actions(self) -> None:
-        actions = [("Tal cual", "")] + list(PRESET_INSTRUCTIONS.items())
-        self._open_bubbles(actions)
+        self._open_bubbles(self._menu_actions())
+
+    def _menu_actions(self) -> list[tuple[str, str]]:
+        if self._current_text():
+            return [(a.label, a.label) for a in ACTIONS] + [("Cerrar", "__quit__")]
+        return [
+            ("Más grande", "__bigger__"),
+            ("Más pequeño", "__smaller__"),
+            ("Cerrar", "__quit__"),
+        ]
 
     def _on_menu(self) -> None:
-        """Boton derecho. Si hay algo dictado, las acciones sobre ese
-        texto; si no, las de manejo del propio orbe."""
-        if self.pending_text:
-            self._show_actions()
-            return
-        self._open_bubbles(
-            [
-                ("Más grande", "__bigger__"),
-                ("Más pequeño", "__smaller__"),
-                ("Salir", "__quit__"),
-            ]
-        )
+        self._open_bubbles(self._menu_actions())
 
     def _open_bubbles(self, actions: list[tuple[str, str]]) -> None:
         _close_safely(self.bubbles)
@@ -151,35 +186,43 @@ class OrbApp:
         self.bubbles.raise_()
         self.bubbles.activateWindow()
 
-    def _on_action(self, label: str, instruction: str) -> None:
+    def _on_action(self, label: str, payload: str) -> None:
         self.bubbles = None
-        if instruction == "__quit__":
+        if payload == "__quit__":
             self.quit()
             return
-        if instruction == "__bigger__":
+        if payload == "__bigger__":
             self.orb.set_size(self.orb.base_size + 8)
             return
-        if instruction == "__smaller__":
+        if payload == "__smaller__":
             self.orb.set_size(self.orb.base_size - 8)
             return
-        if instruction == "":
-            self._paste(self.pending_text)
-            self.pending_text = ""
-            return
-        self._polish(instruction)
+        action = ACTIONS_BY_LABEL.get(payload)
+        if action is not None:
+            self._polish(action)
 
     # ------------------------------------------------------------------
     # Pulido con IA
     # ------------------------------------------------------------------
 
-    def _polish(self, instruction: str) -> None:
+    def _polish(self, action) -> None:
+        text = self._current_text()
+        if not text:
+            return
+        self.pending_text = text
         self.orb.set_busy(True)
-        text = self.pending_text
         engine = get_engine(self.core.engine_env)
+        log.info("Pulido '%s' sobre %d caracteres", action.label, len(text))
 
         def work():
             try:
-                self.bridge.polished.emit(engine.polish(text, instruction), "")
+                result = engine.polish(
+                    text,
+                    action.instruction,
+                    system=action.system,
+                    temperature=action.temperature,
+                )
+                self.bridge.polished.emit(result, "")
             except Exception as exc:  # noqa: BLE001
                 log.exception("Error llamando al motor de IA")
                 self.bridge.polished.emit("", str(exc))

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+import sys
 from pathlib import Path
 
 from PyQt6.QtCore import QPoint, QPointF, Qt, QTimer, pyqtSignal
@@ -56,7 +57,7 @@ class OrbWidget(QWidget):
             "arrastra para moverlo, rueda para cambiar el tamaño"
         )
 
-        self.frames = [QPixmap(str(p)) for p in sorted(FRAMES_DIR.glob("orb*.png"))]
+        self.frames = [QPixmap(str(p)) for p in sorted(FRAMES_DIR.glob("orb*.webp"))]
         if not self.frames:
             log.warning("No hay fotogramas del orbe en %s", FRAMES_DIR)
 
@@ -313,6 +314,45 @@ class OrbWidget(QWidget):
             int(center.x() - size / 2), int(center.y() - size / 2), pix
         )
         painter.end()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        self._follow_all_desktops()
+
+    def _follow_all_desktops(self) -> None:
+        """Que el orbe esté en todos los escritorios virtuales.
+
+        Sin esto el orbe se queda en el escritorio donde arrancó y
+        desaparece al cambiar de área de trabajo, que es justo cuando más
+        falta hace. Qt no lo expone, así que se pide por EWMH con
+        python-xlib (ya viene con pynput en Linux). Si algo falla, el orbe
+        sigue funcionando: solo se queda en su escritorio."""
+        if sys.platform != "linux":
+            return
+        try:
+            from Xlib import X, Xatom, display, protocol
+
+            disp = display.Display()
+            win = disp.create_resource_object("window", int(self.winId()))
+            root = disp.screen().root
+
+            # 0xFFFFFFFF = "en todos los escritorios"
+            win.change_property(
+                disp.intern_atom("_NET_WM_DESKTOP"), Xatom.CARDINAL, 32, [0xFFFFFFFF]
+            )
+            # Y el mensaje que entienden los gestores de ventanas modernos
+            # para una ventana ya mapeada.
+            event = protocol.event.ClientMessage(
+                window=win,
+                client_type=disp.intern_atom("_NET_WM_STATE"),
+                data=(32, [1, disp.intern_atom("_NET_WM_STATE_STICKY"), 0, 1, 0]),
+            )
+            root.send_event(
+                event, event_mask=X.SubstructureRedirectMask | X.SubstructureNotifyMask
+            )
+            disp.flush()
+        except Exception:
+            log.debug("No se pudo fijar el orbe a todos los escritorios", exc_info=True)
 
     def closeEvent(self, event):  # noqa: N802
         self._save_state()

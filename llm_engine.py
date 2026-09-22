@@ -1,24 +1,40 @@
 """Motores de IA para pulir texto: Ollama local o una API key personal
 (formato chat completions compatible con OpenAI, sirve también para
-Gemini vía su capa de compatibilidad)."""
+Gemini vía su capa de compatibilidad).
+
+La personalidad va en el prompt de sistema (ver `polish_actions.py`) y la
+tarea concreta en el mensaje de usuario. Mezclarlo todo en un solo bloque
+de texto, como se hacía antes, daba resultados mucho más flojos: el
+modelo trataba las reglas de comportamiento como parte del encargo."""
 
 from __future__ import annotations
 
 import requests
 
+TIMEOUT = 180   # un prompt profesional largo en CPU no sale en 60 s
+
+DEFAULT_SYSTEM = (
+    "Eres un editor profesional de textos en español de España. Devuelves "
+    "SOLO el texto resultante, sin explicaciones ni comillas."
+)
+
 
 def build_prompt(text: str, instruction: str) -> str:
     return (
-        "Eres un asistente de escritura. Se te da un texto dictado por voz "
-        "y una instrucción sobre cómo reescribirlo.\n\n"
         f"Instrucción: {instruction}\n\n"
-        f"Texto original:\n{text}\n\n"
-        "Devuelve SOLO el texto reescrito, sin explicaciones ni comillas."
+        f"Texto dictado:\n{text}\n\n"
+        "Devuelve SOLO el resultado."
     )
 
 
 class LLMEngine:
-    def polish(self, text: str, instruction: str) -> str:
+    def polish(
+        self,
+        text: str,
+        instruction: str,
+        system: str = DEFAULT_SYSTEM,
+        temperature: float = 0.3,
+    ) -> str:
         raise NotImplementedError
 
     def is_available(self) -> bool:
@@ -30,12 +46,24 @@ class OllamaEngine(LLMEngine):
         self.host = host.rstrip("/")
         self.model = model
 
-    def polish(self, text: str, instruction: str) -> str:
+    def polish(
+        self,
+        text: str,
+        instruction: str,
+        system: str = DEFAULT_SYSTEM,
+        temperature: float = 0.3,
+    ) -> str:
         prompt = build_prompt(text, instruction)
         resp = requests.post(
             f"{self.host}/api/generate",
-            json={"model": self.model, "prompt": prompt, "stream": False},
-            timeout=60,
+            json={
+                "model": self.model,
+                "prompt": prompt,
+                "system": system,
+                "stream": False,
+                "options": {"temperature": temperature, "num_ctx": 8192},
+            },
+            timeout=TIMEOUT,
         )
         resp.raise_for_status()
         return resp.json()["response"].strip()
@@ -52,7 +80,13 @@ class ApiKeyEngine(LLMEngine):
         self.api_key = api_key
         self.model = model
 
-    def polish(self, text: str, instruction: str) -> str:
+    def polish(
+        self,
+        text: str,
+        instruction: str,
+        system: str = DEFAULT_SYSTEM,
+        temperature: float = 0.3,
+    ) -> str:
         prompt = build_prompt(text, instruction)
         resp = requests.post(
             self.api_url,
@@ -62,9 +96,13 @@ class ApiKeyEngine(LLMEngine):
             },
             json={
                 "model": self.model,
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": temperature,
             },
-            timeout=60,
+            timeout=TIMEOUT,
         )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"].strip()
