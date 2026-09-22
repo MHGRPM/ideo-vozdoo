@@ -1,5 +1,8 @@
 """Burbuja flotante (tkinter) para elegir una acción de IA sobre el
-texto dictado, revisar el resultado y pegarlo."""
+texto dictado, revisar el resultado y pegarlo.
+
+El aspecto sigue la marca Odoo I+D+E Spain sobre fondo oscuro, con el
+orbe de Vozdoo (`assets/vozdoo-orb-64.png`) como ancla visual."""
 
 from __future__ import annotations
 
@@ -8,6 +11,8 @@ import sys
 import threading
 import time
 import tkinter as tk
+from pathlib import Path
+from tkinter import font as tkfont
 from tkinter import scrolledtext
 from typing import Callable
 
@@ -17,6 +22,20 @@ import ollama_setup
 from llm_engine import LLMEngine, OllamaEngine
 
 log = logging.getLogger("vozdoo")
+
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+
+# Paleta de marca sobre fondo oscuro, la del orbe de Vozdoo.
+BG = "#0B0710"            # casi negro con tinte púrpura, funde con el orbe
+SURFACE = "#171022"       # tarjetas y campos de texto
+TEXT = "#F4F1F7"          # texto principal
+MUTED = "#A99FB8"         # texto secundario
+PURPLE = "#875A7B"        # --ide-purple-light, botones de acción
+PURPLE_ACTIVE = "#714B67" # --ide-purple, estado pulsado
+TEAL = "#017E84"          # --ide-teal, acción principal y micrófono
+TEAL_ACTIVE = "#016065"
+CYAN = "#4DD9E6"          # neón del orbe, estados en curso
+DANGER = "#FF6B6B"        # rojo legible sobre oscuro (el "red" de tk no lo es)
 
 PRESET_INSTRUCTIONS: dict[str, str] = {
     "Más formal": (
@@ -33,6 +52,22 @@ PRESET_INSTRUCTIONS: dict[str, str] = {
     ),
     "Resumir": "Resume el texto en 1-2 frases manteniendo la idea principal.",
 }
+
+
+def pick_font(preferred: tuple[str, ...], fallback: str) -> str:
+    """Primera familia instalada de `preferred`, o `fallback`.
+
+    Los equipos del equipo PM no tienen por qué tener Inter ni Caveat,
+    así que la burbuja se ve bien igual con la fuente del sistema.
+    Requiere que exista ya una ventana raíz de Tk."""
+    try:
+        available = set(tkfont.families())
+    except Exception:
+        return fallback
+    for family in preferred:
+        if family in available:
+            return family
+    return fallback
 
 
 class PolishBubble:
@@ -55,10 +90,99 @@ class PolishBubble:
         self.auto_paste = auto_paste
         self.window: tk.Toplevel | None = None
         self._polish_cancelled = False
+        self._orb: tk.PhotoImage | None = None
+        self.font_body = "TkDefaultFont"
+        self.font_title = "TkDefaultFont"
+
+    # ------------------------------------------------------------------
+    # Marca: fuentes, logo y fábricas de widgets ya estilados
+    # ------------------------------------------------------------------
+
+    def _load_brand(self) -> None:
+        self.font_body = pick_font(("Inter", "Ubuntu", "Noto Sans"), "TkDefaultFont")
+        self.font_title = pick_font(("Caveat",), self.font_body)
+        try:
+            self._orb = tk.PhotoImage(
+                master=self.root, file=str(ASSETS_DIR / "vozdoo-orb-64.png")
+            )
+        except Exception:
+            # Sin logo la burbuja sigue siendo perfectamente usable.
+            log.debug("No se pudo cargar el orbe de Vozdoo", exc_info=True)
+            self._orb = None
+
+    def _label(self, parent, text: str, *, fg: str = TEXT, size: int = 10, **kwargs):
+        return tk.Label(
+            parent,
+            text=text,
+            bg=kwargs.pop("bg", BG),
+            fg=fg,
+            font=(self.font_body, size),
+            justify="left",
+            **kwargs,
+        )
+
+    def _button(self, parent, text: str, command=None, *, kind: str = "purple"):
+        colors = {
+            "purple": (PURPLE, PURPLE_ACTIVE, TEXT),
+            "teal": (TEAL, TEAL_ACTIVE, TEXT),
+            "ghost": (SURFACE, PURPLE_ACTIVE, MUTED),
+        }[kind]
+        bg, active, fg = colors
+        return tk.Button(
+            parent,
+            text=text,
+            command=command,
+            bg=bg,
+            fg=fg,
+            activebackground=active,
+            activeforeground=TEXT,
+            # En macOS tk ignora bg en los botones y mira highlightbackground.
+            highlightbackground=bg,
+            font=(self.font_body, 10),
+            relief="flat",
+            bd=0,
+            padx=12,
+            pady=7,
+            cursor="hand2",
+        )
+
+    def _header(self) -> None:
+        header = tk.Frame(self.window, bg=BG)
+        header.pack(fill="x", padx=16, pady=(14, 10))
+        if self._orb is not None:
+            tk.Label(header, image=self._orb, bg=BG, bd=0).pack(side="left")
+        titles = tk.Frame(header, bg=BG)
+        titles.pack(side="left", padx=(12, 0))
+        tk.Label(
+            titles,
+            text="Vozdoo",
+            bg=BG,
+            fg=TEXT,
+            font=(self.font_title, 22 if self.font_title == "Caveat" else 15, "bold"),
+        ).pack(anchor="w")
+        tk.Label(
+            titles, text="pulir con IA", bg=BG, fg=MUTED, font=(self.font_body, 9)
+        ).pack(anchor="w")
+
+    def _quote(self, text: str) -> None:
+        """El texto dictado, en una tarjeta con el púrpura de marca al canto."""
+        card = tk.Frame(self.window, bg=PURPLE)
+        card.pack(fill="x", padx=16, pady=(0, 12))
+        inner = tk.Frame(card, bg=SURFACE)
+        inner.pack(fill="both", expand=True, padx=(3, 0))
+        self._label(
+            inner, text, bg=SURFACE, fg=TEXT, wraplength=330, padx=12, pady=10
+        ).pack(anchor="w")
+
+    # ------------------------------------------------------------------
+    # Pantallas
+    # ------------------------------------------------------------------
 
     def show(self) -> None:
         self.window = tk.Toplevel(self.root)
         self.window.title("Vozdoo — pulir")
+        self.window.configure(bg=BG)
+        self._load_brand()
         x, y = self.root.winfo_pointerxy()
         self.window.geometry(f"+{x + 20}+{y + 20}")
         self.window.attributes("-topmost", True)
@@ -70,25 +194,29 @@ class PolishBubble:
 
     def _render_choose_action(self) -> None:
         self._clear()
-        tk.Label(self.window, text=self.original_text, wraplength=360, justify="left").pack(
-            padx=10, pady=(10, 6)
-        )
+        self._header()
+        self._quote(self.original_text)
 
         if not self.engine.is_available():
             self._render_install_ollama()
             return
 
-        for label, instruction in PRESET_INSTRUCTIONS.items():
-            tk.Button(
-                self.window,
-                text=label,
-                command=lambda i=instruction: self._run_polish(i),
-            ).pack(fill="x", padx=10, pady=2)
+        grid = tk.Frame(self.window, bg=BG)
+        grid.pack(fill="x", padx=16)
+        grid.columnconfigure(0, weight=1, uniform="preset")
+        grid.columnconfigure(1, weight=1, uniform="preset")
+        for index, (label, instruction) in enumerate(PRESET_INSTRUCTIONS.items()):
+            self._button(
+                grid, label, lambda i=instruction: self._run_polish(i)
+            ).grid(row=index // 2, column=index % 2, sticky="ew", padx=3, pady=3)
 
-        custom_btn = tk.Button(self.window, text="🎤 Instrucción personalizada")
-        custom_btn.pack(fill="x", padx=10, pady=(6, 10))
+        custom_btn = self._button(self.window, "Instrucción por voz", kind="teal")
+        custom_btn.pack(fill="x", padx=19, pady=(10, 4))
         custom_btn.bind("<ButtonPress-1>", lambda e: self.record_start_fn())
         custom_btn.bind("<ButtonRelease-1>", lambda e: self._on_custom_instruction())
+        self._label(
+            self.window, "mantén pulsado el botón y habla", fg=MUTED, size=8
+        ).pack(pady=(0, 14))
 
     def _on_custom_instruction(self) -> None:
         instruction = self.record_stop_fn()
@@ -97,28 +225,27 @@ class PolishBubble:
         self._run_polish(instruction)
 
     def _render_install_ollama(self) -> None:
-        tk.Label(
+        self._label(
             self.window,
-            text=(
-                "Ollama no está instalado o no responde, y no hay una "
-                "API key configurada."
-            ),
-            wraplength=360,
-            justify="left",
-        ).pack(padx=10, pady=6)
-        tk.Button(
-            self.window,
-            text="Instalar Ollama automáticamente",
-            command=self._start_ollama_install,
-        ).pack(fill="x", padx=10, pady=(0, 10))
+            "Ollama no está instalado o no responde, y no hay una "
+            "API key configurada.",
+            fg=MUTED,
+            wraplength=340,
+        ).pack(padx=16, pady=(0, 10))
+        self._button(
+            self.window, "Instalar Ollama automáticamente", self._start_ollama_install
+        ).pack(fill="x", padx=19, pady=(0, 16))
 
     def _run_polish(self, instruction: str) -> None:
         self._clear()
         self._polish_cancelled = False
-        tk.Label(self.window, text="Pensando...").pack(padx=10, pady=(20, 6))
-        tk.Button(
-            self.window, text="Cancelar", command=self._cancel_polish
-        ).pack(fill="x", padx=10, pady=(0, 10))
+        self._header()
+        self._label(self.window, "Pensando...", fg=CYAN, size=12).pack(
+            padx=16, pady=(6, 14)
+        )
+        self._button(self.window, "Cancelar", self._cancel_polish, kind="ghost").pack(
+            fill="x", padx=19, pady=(0, 16)
+        )
         threading.Thread(
             target=self._run_polish_thread, args=(instruction,), daemon=True
         ).start()
@@ -166,44 +293,69 @@ class PolishBubble:
 
     def _render_error(self, message: str) -> None:
         self._clear()
-        tk.Label(
+        self._header()
+        self._label(
             self.window,
-            text=f"Error: {message} Revisa tu configuración en .env.",
-            wraplength=360,
-            justify="left",
-            fg="red",
-        ).pack(padx=10, pady=10)
-        tk.Button(self.window, text="Cerrar", command=self.window.destroy).pack(
-            fill="x", padx=10, pady=(0, 10)
+            f"Error: {message} Revisa tu configuración en .env.",
+            fg=DANGER,
+            wraplength=340,
+        ).pack(padx=16, pady=(0, 12))
+        self._button(self.window, "Cerrar", self.window.destroy, kind="ghost").pack(
+            fill="x", padx=19, pady=(0, 16)
         )
 
     def _render_result(self, result_text: str) -> None:
         self._clear()
-        text_widget = scrolledtext.ScrolledText(self.window, width=44, height=8, wrap="word")
+        self._header()
+        text_widget = scrolledtext.ScrolledText(
+            self.window,
+            width=42,
+            height=8,
+            wrap="word",
+            bg=SURFACE,
+            fg=TEXT,
+            insertbackground=TEXT,
+            selectbackground=PURPLE,
+            font=(self.font_body, 10),
+            relief="flat",
+            bd=0,
+            padx=10,
+            pady=8,
+        )
         text_widget.insert("1.0", result_text)
         text_widget.configure(state="disabled")
-        text_widget.pack(padx=10, pady=10)
-
-        button_row = tk.Frame(self.window)
-        button_row.pack(fill="x", padx=10, pady=(0, 10))
-        tk.Button(
-            button_row,
-            text="Pegar",
-            command=lambda: self._paste_and_close(result_text),
-        ).pack(side="left", expand=True, fill="x")
-        tk.Button(
-            button_row, text="Reintentar", command=self._render_choose_action
-        ).pack(side="left", expand=True, fill="x")
-        tk.Button(button_row, text="Descartar", command=self.window.destroy).pack(
-            side="left", expand=True, fill="x"
+        # La barra de scroll de ScrolledText es gris de sistema y canta
+        # sobre el fondo oscuro; va aparte porque no es un widget hijo normal.
+        text_widget.vbar.configure(
+            bg=SURFACE,
+            troughcolor=BG,
+            activebackground=PURPLE,
+            relief="flat",
+            bd=0,
+            width=10,
+            highlightthickness=0,
         )
+        text_widget.pack(padx=16, pady=(0, 12))
+
+        button_row = tk.Frame(self.window, bg=BG)
+        button_row.pack(fill="x", padx=16, pady=(0, 16))
+        self._button(
+            button_row, "Pegar", lambda: self._paste_and_close(result_text), kind="teal"
+        ).pack(side="left", expand=True, fill="x", padx=3)
+        self._button(
+            button_row, "Reintentar", self._render_choose_action
+        ).pack(side="left", expand=True, fill="x", padx=3)
+        self._button(
+            button_row, "Descartar", self.window.destroy, kind="ghost"
+        ).pack(side="left", expand=True, fill="x", padx=3)
 
     def _start_ollama_install(self) -> None:
         self._clear()
-        self.status_label = tk.Label(
-            self.window, text="Instalando Ollama...", wraplength=360, justify="left"
+        self._header()
+        self.status_label = self._label(
+            self.window, "Instalando Ollama...", fg=CYAN, wraplength=340
         )
-        self.status_label.pack(padx=10, pady=20)
+        self.status_label.pack(padx=16, pady=(0, 16))
         threading.Thread(target=self._run_ollama_install, daemon=True).start()
 
     def _set_status(self, text: str) -> None:
@@ -212,9 +364,9 @@ class PolishBubble:
     def _finish_install_with_retry(self, text: str) -> None:
         def render():
             self.status_label.configure(text=text)
-            tk.Button(
-                self.window, text="Reintentar", command=self._render_choose_action
-            ).pack(fill="x", padx=10, pady=(6, 10))
+            self._button(
+                self.window, "Reintentar", self._render_choose_action
+            ).pack(fill="x", padx=19, pady=(0, 16))
 
         self.window.after(0, render)
 
