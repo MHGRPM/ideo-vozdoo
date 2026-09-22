@@ -30,14 +30,12 @@ from clipboard_paste import paste_text
 from llm_engine import get_engine
 
 try:
-    import tkinter as tk
-    from polish_bubble import PolishBubble
+    from orb_app import OrbApp
 except ImportError:
-    # Falta el paquete de sistema python3-tk (no instalable vía pip). El
-    # dictado normal (Ctrl+Win) no depende de tkinter, así que no debe
-    # tumbar el import de todo el módulo: solo se pierde el hotkey de
-    # pulir con IA (Alt+Win), ver Vozdoo.run().
-    tk = None
+    # Falta PyQt6. El dictado normal (Ctrl+Win) no depende del orbe, así
+    # que no debe tumbar el import de todo el módulo: solo se pierde el
+    # orbe flotante y el pulido con IA. Ver Vozdoo.run().
+    OrbApp = None
     PolishBubble = None
 
 SCRIPT_DIR = Path(__file__).parent
@@ -120,6 +118,14 @@ class AudioBuffer:
         if not self.recording:
             return
         self.chunks.append(indata.copy())
+
+    def level(self) -> float:
+        """Volumen del último trozo capturado, 0..1. Lo usa el orbe para
+        latir con la voz en vez de a ritmo fijo."""
+        if not self.chunks:
+            return 0.0
+        rms = float(np.sqrt(np.mean(np.square(self.chunks[-1]))))
+        return min(1.0, rms * 12)
 
     def start(self):
         self.chunks = []
@@ -263,7 +269,7 @@ class Vozdoo:
         self._pressed_tokens: set = set()
         self._active_mode: str | None = None
         self.engine_env = env
-        self.tk_root: tk.Tk | None = None
+        self.orb_app = None
 
         log.info("Cargando Whisper '%s'...", env["VOZDOO_WHISPER_MODEL"])
         device = env["VOZDOO_WHISPER_DEVICE"]
@@ -300,7 +306,6 @@ class Vozdoo:
                 return
             audio = self.buffer.stop()
             self.processing = True
-            mode = self._active_mode
             self._active_mode = None
 
         beep(600, 80)
@@ -310,22 +315,11 @@ class Vozdoo:
             t0 = time.time()
             text = transcribe(self.whisper, audio, self.language)
             log.info("STT (%.2fs): %s", time.time() - t0, text)
-
             if not text:
                 log.info("Audio vacío o sin voz, nada que hacer")
                 return
-
-            if mode == "normal":
-                paste_text(text, self.auto_paste)
-                log.info("Pegado en la ventana activa" if self.auto_paste else "Copiado al portapapeles")
-            elif self.tk_root is None:
-                log.warning(
-                    "No se puede abrir la burbuja de pulido: falta tkinter "
-                    "(instala python3-tk). Texto transcrito: %s",
-                    text,
-                )
-            else:
-                self.tk_root.after(0, lambda: self._open_polish_bubble(text))
+            paste_text(text, self.auto_paste)
+            log.info("Pegado en la ventana activa" if self.auto_paste else "Copiado al portapapeles")
         except Exception:
             log.exception("Error transcribiendo/procesando")
         finally:
@@ -338,6 +332,17 @@ class Vozdoo:
                 return
             beep(800, 80)
             self.buffer.start()
+
+    def mic_level(self) -> float:
+        return self.buffer.level()
+
+    def cancel_custom_recording(self) -> None:
+        """Se empezó a grabar y resultó ser un arrastre del orbe: se tira
+        el audio sin transcribir."""
+        with self.lock:
+            if not self.buffer.recording:
+                return
+            self.buffer.stop()
 
     def stop_custom_recording(self) -> str:
         """Llamado desde la burbuja al soltar el botón del micro."""
@@ -352,37 +357,28 @@ class Vozdoo:
         finally:
             self.processing = False
 
-    def _open_polish_bubble(self, text: str) -> None:
-        """Nota de alcance: si `transcribe()` lanza una excepción (no si
-        solo devuelve vacío, ese caso ya está cubierto arriba), el error
-        se registra en el log pero la burbuja no llega a abrirse — el
-        spec pedía que fuera visible en la burbuja, pero eso exigiría
-        abrirla ANTES de transcribir; se deja así por ahora porque es un
-        caso raro (fallo real de Whisper, no "no se dijo nada")."""
-        engine = get_engine(self.engine_env)
-        bubble = PolishBubble(
-            root=self.tk_root,
-            original_text=text,
-            engine=engine,
-            record_start_fn=self.start_custom_recording,
-            record_stop_fn=self.stop_custom_recording,
-            paste_fn=paste_text,
-            auto_paste=self.auto_paste,
-        )
-        bubble.show()
-
     def run(self) -> None:
-        tk_available = tk is not None
-        if tk_available:
-            self.tk_root = tk.Tk()
-            self.tk_root.withdraw()
-            signal.signal(signal.SIGINT, lambda *_: self.tk_root.quit())
+        orb_app = None
+        if OrbApp is not None:
+            try:
+                orb_app = OrbApp(self)
+            except Exception as exc:  # noqa: BLE001
+                # En Linux Qt necesita libxcb-cursor0, que no se instala
+                # con pip. Sin orbe el dictado normal sigue entero, así
+                # que se avisa y se sigue en vez de morir.
+                log.warning(
+                    "No se pudo arrancar el orbe (%s). El dictado normal "
+                    "sigue funcionando; en Linux prueba: "
+                    "sudo apt install libxcb-cursor0",
+                    exc,
+                )
+                orb_app = None
         else:
             log.warning(
-                "tkinter no disponible (falta el paquete python3-tk) — el "
-                "hotkey de pulir con IA (Alt+Win) no estará disponible, pero "
-                "el dictado normal (Ctrl+Win) sigue funcionando"
+                "PyQt6 no está instalado: no hay orbe ni pulido con IA, "
+                "solo dictado normal. Instálalo con: pip install PyQt6"
             )
+        self.orb_app = orb_app
 
         def normalize(key):
             for name, variants in _MODIFIER_KEYS.items():
@@ -397,7 +393,13 @@ class Vozdoo:
                 if self._active_mode is not None:
                     return
                 if self.hotkeys["polish"] <= self._pressed_tokens:
-                    self._start_recording("polish")
+                    if self.orb_app is None:
+                        return
+                    self._active_mode = "polish"
+                    # Emitir una señal es la forma segura de hablar con Qt
+                    # desde el hilo del listener: la entrega se hace en el
+                    # hilo de la interfaz.
+                    self.orb_app.bridge.hotkey_start.emit()
                 elif self.hotkeys["normal"] <= self._pressed_tokens:
                     self._start_recording("normal")
             except Exception:
@@ -414,7 +416,13 @@ class Vozdoo:
                 active = self._active_mode
                 was_active = active is not None and token in self.hotkeys[active]
                 self._pressed_tokens.discard(token)
-                if was_active:
+                if not was_active:
+                    return
+                if active == "polish":
+                    self._active_mode = None
+                    if self.orb_app is not None:
+                        self.orb_app.bridge.hotkey_stop.emit()
+                else:
                     self._finish_recording()
             except Exception:
                 log.exception("Error en on_release")
@@ -425,18 +433,19 @@ class Vozdoo:
             self.env["VOZDOO_POLISH_HOTKEY"],
         )
 
-        if tk_available:
+        if orb_app is not None:
             listener = pkb.Listener(on_press=on_press, on_release=on_release)
             listener.start()
+            signal.signal(signal.SIGINT, lambda *_: orb_app.quit())
             try:
-                self.tk_root.mainloop()
+                orb_app.run()
             finally:
                 listener.stop()
                 log.info("Saliendo...")
         else:
-            # Sin tkinter no hay mainloop que correr: comportamiento
-            # original de antes de la burbuja de pulido, preservado tal
-            # cual para no alterar en nada el hotkey de dictado normal.
+            # Sin orbe no hay bucle de Qt que correr: comportamiento
+            # original de antes del orbe, preservado tal cual para no
+            # alterar en nada el hotkey de dictado normal.
             try:
                 with pkb.Listener(on_press=on_press, on_release=on_release) as listener:
                     listener.join()

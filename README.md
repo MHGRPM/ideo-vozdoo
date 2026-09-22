@@ -24,7 +24,7 @@ cd ideo-vozdoo
 
 *Linux* — abre una terminal y pega esto, línea por línea:
 ```bash
-sudo apt install python3 python3-venv python3-pip python3-tk git libportaudio2 xclip
+sudo apt install python3 python3-venv python3-pip git libportaudio2 xclip libxcb-cursor0
 git clone https://github.com/MHGRPM/ideo-vozdoo.git
 cd ideo-vozdoo
 ./start-vozdoo.sh
@@ -81,7 +81,7 @@ Si falta alguno, instálalo primero según tu sistema:
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-venv python3-pip python3-tk git libportaudio2
+sudo apt install python3 python3-venv python3-pip git libportaudio2 libxcb-cursor0
 ```
 
 - `python3-venv` es imprescindible: sin él, el script falla al crear el
@@ -170,21 +170,32 @@ Para volver a arrancarlo otro día, repite el mismo comando
 
 ---
 
-## Dictar + pulir con IA (opcional)
+## El orbe: dictar y pulir con IA
 
-Además del dictado normal (`Ctrl + Win`), hay un segundo hotkey,
-**Alt + Win** por defecto, que abre una burbuja para reescribir el texto
-con IA antes de pegarlo: más formal, mejorar un prompt, corregir, resumir,
-o una instrucción tuya dicha por voz.
+Al arrancar Vozdoo aparece un orbe pequeño flotando en una esquina de la
+pantalla. En reposo está quieto y no gasta nada; el vídeo solo se
+reproduce mientras te está escuchando.
 
-Por defecto usa un modelo de IA local (Ollama) — si no lo tienes
-instalado, la burbuja te ofrece instalarlo con un clic. Si prefieres usar
-tu propia clave de API (OpenAI o Gemini), configúrala en `.env`
+| Gesto | Qué hace |
+|---|---|
+| Mantener pulsado el orbe | Graba mientras lo sujetas. Al soltar, transcribe y te ofrece las acciones |
+| Botón derecho | Abre las mini-burbujas. Con algo dictado, las acciones de IA; sin nada dictado, tamaño y salir |
+| Arrastrar | Lo mueves donde quieras. Recuerda la posición para la próxima vez |
+| Rueda del ratón | Lo hace más grande o más pequeño (de 28 a 140 px) |
+| **Alt + Win** | Lo mismo que mantenerlo pulsado, pero desde el teclado |
+
+Las acciones son: pegar tal cual, más formal, mejorar prompt, corregir y
+resumir. Al elegir una, el texto pasa por la IA y aparece un panel donde
+puedes **retocarlo antes de pegarlo**.
+
+Por defecto usa un modelo de IA local (Ollama). Si prefieres tu propia
+clave de API (OpenAI o Gemini), configúrala en `.env`
 (`VOZDOO_LLM_API_KEY`) y se usará esa en su lugar, sin necesidad de
 Ollama.
 
-Este hotkey es totalmente opcional: si no lo usas nunca, no afecta en
-nada al dictado normal.
+El dictado normal (`Ctrl + Win`) sigue funcionando igual y no depende del
+orbe para nada: si PyQt6 no arranca en tu equipo, pierdes el orbe pero no
+el dictado.
 
 ---
 

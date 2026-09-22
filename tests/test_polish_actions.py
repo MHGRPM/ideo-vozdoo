@@ -1,12 +1,9 @@
-import pytest
 import sys
 from pathlib import Path
 
-pytest.importorskip("tkinter")
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from polish_bubble import PRESET_INSTRUCTIONS
+from polish_actions import PRESET_INSTRUCTIONS
 
 EXPECTED_PRESETS = {"Más formal", "Mejorar prompt", "Corregir", "Resumir"}
 
