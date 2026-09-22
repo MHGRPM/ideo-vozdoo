@@ -21,6 +21,7 @@ from llm_engine import get_engine
 from orb_widget import OrbWidget
 from polish_actions import ACTIONS, ACTIONS_BY_LABEL
 from result_panel import ResultPanel
+from x11_focus import FocusKeeper
 
 log = logging.getLogger("vozdoo")
 
@@ -63,6 +64,14 @@ class OrbApp:
         self.level_timer.setInterval(50)
         self.level_timer.timeout.connect(self._poll_level)
 
+        # Vigila en segundo plano cual es la ventana donde el usuario esta
+        # escribiendo, para devolverle el foco antes de pegar.
+        self.focus = FocusKeeper()
+        self.focus_timer = QTimer()
+        self.focus_timer.setInterval(400)
+        self.focus_timer.timeout.connect(self._remember_focus)
+        self.focus_timer.start()
+
         self.orb.dictation_started.connect(self._on_start)
         self.orb.dictation_stopped.connect(self._on_stop)
         self.orb.dictation_cancelled.connect(self._on_cancel)
@@ -100,6 +109,16 @@ class OrbApp:
     def _on_start(self) -> None:
         self.core.start_custom_recording()
         self.level_timer.start()
+
+    def _remember_focus(self) -> None:
+        own = {int(self.orb.winId())}
+        for widget in (self.bubbles, self.panel):
+            try:
+                if widget is not None:
+                    own.add(int(widget.winId()))
+            except RuntimeError:
+                pass
+        self.focus.remember(own)
 
     def _poll_level(self) -> None:
         self.orb.set_level(self.core.mic_level())
@@ -267,10 +286,14 @@ class OrbApp:
         self.panel = None
 
     def _paste(self, text: str) -> None:
-        """Se pega con un respiro: al cerrar nuestras ventanas el foco
-        tarda un instante en volver a donde estaba el cursor."""
+        """Devuelve el foco a la ventana donde estabas y pega alli.
+
+        Sin el paso de restituir el foco, el Ctrl+V simulado acaba en la
+        ventana del orbe y el texto no aparece en ningun sitio (aunque
+        queda en el portapapeles, que es el plan B de siempre)."""
         if not text:
             return
+        self.focus.restore()
         QTimer.singleShot(
             PASTE_DELAY_MS, lambda: paste_text(text, self.core.auto_paste)
         )

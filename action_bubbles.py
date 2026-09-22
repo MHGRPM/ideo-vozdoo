@@ -43,6 +43,9 @@ class ActionBubbles(QWidget):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        # Las burbujas tampoco activan su ventana: al elegir una accion se
+        # pega en la ventana donde estabas, no aqui.
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setMouseTracking(True)
 
         screen = QGuiApplication.screenAt(center) or QGuiApplication.primaryScreen()
