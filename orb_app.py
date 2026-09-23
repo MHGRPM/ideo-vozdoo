@@ -8,16 +8,20 @@ orbe siga animandose."""
 from __future__ import annotations
 
 import logging
+import sys
 import threading
+import time
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 from PyQt6.QtWidgets import QApplication
 
 import pyperclip
 
+import ollama_setup
 from action_bubbles import ActionBubbles
 from clipboard_paste import paste_text
-from llm_engine import get_engine
+from llm_engine import OllamaEngine, get_engine
+from ollama_panel import OllamaPanel
 from orb_widget import OrbWidget
 from polish_actions import ACTIONS, ACTIONS_BY_LABEL
 from result_panel import ResultPanel
@@ -44,6 +48,9 @@ class Bridge(QObject):
 
     transcribed = pyqtSignal(str, str)   # texto, error
     polished = pyqtSignal(str, str)      # texto, error
+    install_status = pyqtSignal(str)     # paso de la instalacion de Ollama
+    install_fraction = pyqtSignal(float)
+    install_done = pyqtSignal(str)
     hotkey_start = pyqtSignal()          # emitidas desde el hilo del listener
     hotkey_stop = pyqtSignal()
 
@@ -59,6 +66,8 @@ class OrbApp:
         self.pending_text = ""
         self.bubbles: ActionBubbles | None = None
         self.panel: ResultPanel | None = None
+        self.ollama_panel: OllamaPanel | None = None
+        self.polish_serial = 0        # para descartar respuestas canceladas
 
         self.level_timer = QTimer()
         self.level_timer.setInterval(50)
@@ -81,6 +90,9 @@ class OrbApp:
         self.bridge.polished.connect(self._on_polished)
         self.bridge.hotkey_start.connect(self.start_dictation_from_hotkey)
         self.bridge.hotkey_stop.connect(self.stop_dictation_from_hotkey)
+        self.bridge.install_status.connect(self._on_install_status)
+        self.bridge.install_fraction.connect(self._on_install_fraction)
+        self.bridge.install_done.connect(self._on_install_done)
 
         self._log_engine()
 
@@ -180,7 +192,11 @@ class OrbApp:
 
     def _menu_actions(self) -> list[tuple[str, str]]:
         if self._current_text():
-            return [(a.label, a.label) for a in ACTIONS] + [("Cerrar", "__quit__")]
+            return (
+                [("Abrir panel", "__panel__")]
+                + [(a.label, a.label) for a in ACTIONS]
+                + [("Cerrar", "__quit__")]
+            )
         return [
             ("Más grande", "__bigger__"),
             ("Más pequeño", "__smaller__"),
@@ -216,6 +232,12 @@ class OrbApp:
         if payload == "__smaller__":
             self.orb.set_size(self.orb.base_size - 8)
             return
+        if payload == "__panel__":
+            text = self._current_text()
+            if text:
+                self.pending_text = text
+                self._show_panel(text)
+            return
         action = ACTIONS_BY_LABEL.get(payload)
         if action is not None:
             self._polish(action)
@@ -224,16 +246,29 @@ class OrbApp:
     # Pulido con IA
     # ------------------------------------------------------------------
 
-    def _polish(self, action) -> None:
-        text = self._current_text()
+    def _polish(self, action, text: str | None = None) -> None:
+        """Si el panel esta abierto se trabaja sobre lo que hay en el, que
+        puede venir ya pulido de una accion anterior: asi se puede encadenar
+        (corregir, luego formal, luego resumir) sin salir de la mesa."""
+        text = text if text is not None else self._current_text()
         if not text:
             return
         self.pending_text = text
-        self.orb.set_busy(True)
+
         engine = get_engine(self.core.engine_env)
+        if not self._engine_ready(engine):
+            self._show_ollama_panel(engine)
+            return
+
+        self.polish_serial += 1
+        serial = self.polish_serial
+        self.orb.set_busy(True)
+        if self.panel is not None:
+            self._panel_busy(f"{action.label}...")
         log.info("Pulido '%s' sobre %d caracteres", action.label, len(text))
 
         def work():
+            started = time.monotonic()
             try:
                 result = engine.polish(
                     text,
@@ -241,12 +276,35 @@ class OrbApp:
                     system=action.system,
                     temperature=action.temperature,
                 )
-                self.bridge.polished.emit(result, "")
+                log.info("Pulido listo en %.1fs", time.monotonic() - started)
+                if serial == self.polish_serial:
+                    self.bridge.polished.emit(result, "")
             except Exception as exc:  # noqa: BLE001
                 log.exception("Error llamando al motor de IA")
-                self.bridge.polished.emit("", str(exc))
+                if serial == self.polish_serial:
+                    self.bridge.polished.emit("", str(exc))
 
         threading.Thread(target=work, daemon=True).start()
+
+    def _engine_ready(self, engine) -> bool:
+        try:
+            return bool(engine.is_available())
+        except Exception:
+            return False
+
+    def _panel_busy(self, label: str | None) -> None:
+        try:
+            if self.panel is not None:
+                self.panel.set_busy(label)
+        except RuntimeError:
+            self.panel = None
+
+    def _cancel_polish(self) -> None:
+        """No se puede abortar la peticion HTTP, pero si ignorar su
+        respuesta y devolver el panel al usuario ahora mismo."""
+        self.polish_serial += 1
+        self.orb.set_busy(False)
+        self._panel_busy(None)
 
     def _on_polished(self, text: str, error: str) -> None:
         self.orb.set_busy(False)
@@ -254,20 +312,38 @@ class OrbApp:
             # Sin modelo o sin red no se pierde el dictado: se ofrece el
             # texto en crudo, que es mejor que quedarse sin nada.
             log.error("Pulido fallido: %s", error)
-            self._show_panel(self.pending_text)
+            self._show_panel(self.pending_text, note=f"No se pudo pulir: {error}")
             return
+        if self.panel is not None:
+            try:
+                self.panel.set_text(text)
+                self.panel.set_busy(None)
+                self.panel.raise_()
+                return
+            except RuntimeError:
+                self.panel = None
         self._show_panel(text)
 
-    def _show_panel(self, text: str) -> None:
+    def _show_panel(self, text: str, note: str | None = None) -> None:
         _close_safely(self.panel)
-        self.panel = ResultPanel(text, self.orb.orb_center())
+        self.panel = ResultPanel(
+            text, self.orb.orb_center(), [a.label for a in ACTIONS]
+        )
         self.panel.destroyed.connect(self._forget_panel)
         self.panel.paste_requested.connect(self._paste_from_panel)
-        self.panel.retry_requested.connect(self._show_actions)
+        self.panel.action_requested.connect(self._on_panel_action)
+        self.panel.cancel_requested.connect(self._cancel_polish)
         self.panel.dismissed.connect(self._forget)
         self.panel.show()
         self.panel.raise_()
         self.panel.activateWindow()
+        if note:
+            self.panel.status.setText(note)
+
+    def _on_panel_action(self, label: str, text: str) -> None:
+        action = ACTIONS_BY_LABEL.get(label)
+        if action is not None:
+            self._polish(action, text)
 
     def _paste_from_panel(self, text: str) -> None:
         _close_safely(self.panel)
@@ -278,6 +354,113 @@ class OrbApp:
     def _forget(self) -> None:
         self.panel = None
         self.pending_text = ""
+
+    # ------------------------------------------------------------------
+    # IA local que no responde: explicarlo e instalarla
+    # ------------------------------------------------------------------
+
+    def _show_ollama_panel(self, engine) -> None:
+        _close_safely(self.ollama_panel)
+        model = getattr(engine, "model", "?")
+        host = getattr(engine, "host", "?")
+        if sys.platform == "win32":
+            command = f"Descarga Ollama de ollama.com y luego: ollama pull {model}"
+        else:
+            command = f"{ollama_setup.linux_mac_install_command()} && ollama pull {model}"
+        self.ollama_panel = OllamaPanel(self.orb.orb_center(), model, host, command)
+        self.ollama_panel.destroyed.connect(self._forget_ollama_panel)
+        self.ollama_panel.install_requested.connect(lambda: self._install_ollama(engine))
+        self.ollama_panel.retry_requested.connect(self._retry_after_install)
+        self.ollama_panel.dismissed.connect(self._forget_ollama_panel)
+        self.ollama_panel.show()
+        self.ollama_panel.raise_()
+        self.ollama_panel.activateWindow()
+        log.warning("IA local no disponible (%s, modelo %s)", host, model)
+
+    def _install_ollama(self, engine) -> None:
+        host = getattr(engine, "host", "http://localhost:11434")
+        model = getattr(engine, "model", "")
+
+        def work():
+            try:
+                if sys.platform == "win32":
+                    import os
+                    import tempfile
+
+                    dest = os.path.join(tempfile.gettempdir(), "OllamaSetup.exe")
+                    self.bridge.install_status.emit("Descargando el instalador...")
+                    ollama_setup.download_windows_installer(dest)
+                    ollama_setup.launch_windows_installer(dest)
+                    self.bridge.install_done.emit(
+                        "Instalador abierto. Termínalo y pulsa Reintentar."
+                    )
+                    return
+
+                if not ollama_setup.is_ollama_running(host):
+                    self.bridge.install_status.emit(
+                        "Abriendo una terminal para instalar Ollama "
+                        "(puede pedirte tu contraseña)..."
+                    )
+                    ollama_setup.run_install_linux_mac().wait()
+                    self.bridge.install_status.emit("Esperando a que Ollama arranque...")
+                    for _ in range(30):
+                        if ollama_setup.is_ollama_running(host):
+                            break
+                        time.sleep(1)
+                    else:
+                        self.bridge.install_done.emit(
+                            "Ollama no respondió. Pulsa Reintentar cuando esté listo."
+                        )
+                        return
+
+                self.bridge.install_status.emit(f"Descargando el modelo {model}...")
+                ollama_setup.pull_model(
+                    host,
+                    model,
+                    on_progress=lambda s: self.bridge.install_status.emit(
+                        f"Descargando {model}: {s}"
+                    ),
+                    on_fraction=self.bridge.install_fraction.emit,
+                )
+                self.bridge.install_done.emit("Listo. Ya puedes usar las acciones de IA.")
+            except Exception as exc:  # noqa: BLE001
+                log.exception("Error instalando Ollama")
+                self.bridge.install_done.emit(f"No se pudo instalar: {exc}")
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _on_install_status(self, text: str) -> None:
+        try:
+            if self.ollama_panel is not None:
+                self.ollama_panel.set_status(text)
+        except RuntimeError:
+            self.ollama_panel = None
+
+    def _on_install_fraction(self, fraction: float) -> None:
+        try:
+            if self.ollama_panel is not None:
+                self.ollama_panel.set_fraction(fraction)
+        except RuntimeError:
+            self.ollama_panel = None
+
+    def _on_install_done(self, message: str) -> None:
+        try:
+            if self.ollama_panel is not None:
+                self.ollama_panel.finish(message)
+        except RuntimeError:
+            self.ollama_panel = None
+
+    def _retry_after_install(self) -> None:
+        engine = get_engine(self.core.engine_env)
+        if self._engine_ready(engine):
+            _close_safely(self.ollama_panel)
+            self.ollama_panel = None
+            self._show_actions()
+        else:
+            self._on_install_status("Sigue sin responder. Revisa la terminal.")
+
+    def _forget_ollama_panel(self, *_) -> None:
+        self.ollama_panel = None
 
     def _forget_bubbles(self, *_) -> None:
         self.bubbles = None

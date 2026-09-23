@@ -188,10 +188,48 @@ Las acciones son: pegar tal cual, más formal, mejorar prompt, corregir y
 resumir. Al elegir una, el texto pasa por la IA y aparece un panel donde
 puedes **retocarlo antes de pegarlo**.
 
-Por defecto usa un modelo de IA local (Ollama). Si prefieres tu propia
-clave de API (OpenAI o Gemini), configúrala en `.env`
-(`VOZDOO_LLM_API_KEY`) y se usará esa en su lugar, sin necesidad de
-Ollama.
+### El panel: la mesa de trabajo
+
+Al elegir una acción aparece un panel oscuro con el resultado. Ahí puedes:
+
+- **Editarlo a mano** antes de nada.
+- **Encadenar acciones** sobre lo que ya hay: corregir, luego hacerlo más
+  formal, luego resumir. Cada botón trabaja sobre el texto que ves, no
+  sobre el original.
+- **Pegar donde estabas** — el correo, el documento, el chat — con el
+  botón de abajo.
+
+Mientras la IA trabaja verás una barra de carga con los segundos que
+lleva. En un portátil sin tarjeta gráfica, pulir una frase son unos 8
+segundos y escribir un prompt profesional completo puede irse a 40. Si se
+te hace largo, **Cancelar** te devuelve el panel al momento.
+
+### La IA local (Ollama)
+
+Vozdoo pule los textos con Ollama **en tu propio ordenador**. No se envía
+nada a ningún servidor: ni tus dictados, ni los textos de tus clientes.
+
+Si no lo tienes instalado, la primera vez que uses una acción de IA
+aparecerá un panel que te lo explica y te lo instala con un botón, con la
+descarga del modelo a la vista. También te enseña el comando por si
+prefieres hacerlo tú:
+
+```
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen2.5:3b-instruct
+```
+
+En Windows se descarga el instalador oficial de ollama.com y luego el
+modelo.
+
+El modelo por defecto (`qwen2.5:3b-instruct`, unos 2 GB) va rápido en
+cualquier portátil. Si quieres más calidad y no te importa esperar,
+cambia `VOZDOO_LLM_MODEL` en el `.env` por uno mayor, por ejemplo
+`qwen2.5:7b-instruct`.
+
+Si prefieres tu propia clave de API (OpenAI o Gemini), configúrala en
+`.env` (`VOZDOO_LLM_API_KEY`) y se usará esa en su lugar, sin necesidad
+de Ollama.
 
 El dictado normal (`Ctrl + Win`) sigue funcionando igual y no depende del
 orbe para nada: si PyQt6 no arranca en tu equipo, pierdes el orbe pero no

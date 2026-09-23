@@ -68,7 +68,14 @@ def launch_windows_installer(path: str) -> None:
     subprocess.Popen([path])
 
 
-def pull_model(host: str, model: str, on_progress: Callable[[str], None]) -> None:
+def pull_model(
+    host: str,
+    model: str,
+    on_progress: Callable[[str], None],
+    on_fraction: Callable[[float], None] | None = None,
+) -> None:
+    """`on_progress` recibe el estado en texto; `on_fraction`, si se pasa,
+    recibe el avance real de la descarga (0..1) para pintar una barra."""
     with requests.post(
         f"{host.rstrip('/')}/api/pull",
         json={"model": model, "stream": True},
@@ -82,3 +89,8 @@ def pull_model(host: str, model: str, on_progress: Callable[[str], None]) -> Non
             data = json.loads(line)
             status = data.get("status", "")
             on_progress(status)
+            if on_fraction is not None:
+                total = data.get("total") or 0
+                completed = data.get("completed") or 0
+                if total:
+                    on_fraction(completed / total)
