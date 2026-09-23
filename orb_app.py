@@ -484,7 +484,9 @@ class OrbApp:
     # ------------------------------------------------------------------
 
     def start_dictation_from_hotkey(self) -> None:
-        """El hotkey hace lo mismo que mantener pulsado el orbe."""
+        """El hotkey hace lo mismo que mantener pulsado el orbe, y ademas
+        se trae el orbe a la pantalla donde estas trabajando."""
+        self.orb.summon()
         self.orb.listening = True
         self.orb._ensure_timer()
         self._on_start()

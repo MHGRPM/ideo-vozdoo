@@ -73,6 +73,7 @@ class OrbWidget(QWidget):
         self._dragging = False
         self._size_now = float(DEFAULT_SIZE)
         self._scaled_cache: dict[int, list[QPixmap]] = {}
+        self._greeted = False
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
@@ -117,11 +118,58 @@ class OrbWidget(QWidget):
         if center is not None:
             self.move(center.x() - box // 2, center.y() - box // 2)
         elif self._saved_pos is not None:
-            self.move(self._saved_pos)
+            fixed = self._clamp_to_screen(self._saved_pos, box)
+            self.move(fixed)
+            if fixed != self._saved_pos:
+                # Guardar ya la posicion buena: si no, al siguiente
+                # arranque se vuelve a partir de la que estaba mal.
+                self._saved_pos = fixed
+                QTimer.singleShot(0, self._save_state)
         else:
             screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
             area = screen.availableGeometry()
             self.move(area.right() - box - MARGIN, area.bottom() - box - MARGIN)
+
+    def _clamp_to_screen(self, pos: QPoint, box: int) -> QPoint:
+        """Devuelve una posicion visible.
+
+        Un portatil que se conecta y desconecta de monitores deja la
+        posicion guardada fuera de la pantalla actual, y entonces el orbe
+        existe pero no se ve por ningun lado."""
+        for screen in QGuiApplication.screens():
+            if screen.availableGeometry().contains(QPoint(pos.x() + box // 2, pos.y() + box // 2)):
+                return pos
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        area = screen.availableGeometry()
+        log.info("La posicion guardada del orbe caia fuera de pantalla; se recoloca")
+        return QPoint(area.right() - box - MARGIN, area.bottom() - box - MARGIN)
+
+    def summon(self) -> None:
+        """Trae el orbe a la pantalla donde esta el raton y lo hace notar.
+
+        Con varios monitores el orbe se queda en uno y trabajas en otro;
+        y si se pierde de vista no hay forma de recuperarlo salvo borrar
+        el fichero de estado. Con esto, el hotkey siempre lo rescata."""
+        box = self._box()
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        area = screen.availableGeometry()
+        if not area.contains(self.geometry().center()):
+            self.move(area.right() - box - MARGIN, area.bottom() - box - MARGIN)
+            self._save_state()
+        self.show()
+        self.raise_()
+        self.greet()
+
+    def greet(self, seconds: float = 1.4) -> None:
+        """Un latido de bienvenida para que se vea donde esta."""
+        self.hover = True
+        self._ensure_timer()
+        QTimer.singleShot(int(seconds * 1000), self._end_greet)
+
+    def _end_greet(self) -> None:
+        if not self.underMouse():
+            self.hover = False
+        self._ensure_timer()
 
     def orb_center(self) -> QPoint:
         """Centro del orbe en coordenadas de pantalla, para colocar las
@@ -318,6 +366,9 @@ class OrbWidget(QWidget):
     def showEvent(self, event):  # noqa: N802
         super().showEvent(event)
         self._follow_all_desktops()
+        if not self._greeted:
+            self._greeted = True
+            self.greet(2.2)
 
     def _follow_all_desktops(self) -> None:
         """Que el orbe esté en todos los escritorios virtuales.
