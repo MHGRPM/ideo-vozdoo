@@ -13,12 +13,13 @@ from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPainterPath
 from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
     QWidget,
 )
+
+from brand_loader import BrandLoader
 
 WIDTH = 470
 BG = "#171022"
@@ -44,19 +45,6 @@ QPushButton {{
 QPushButton:hover {{ background: {hot}; }}
 QPushButton:disabled {{ background: #1C1530; color: #6B6280; }}
 """
-
-BAR_CSS = f"""
-QProgressBar {{
-    background: #0F0A16;
-    border: none;
-    border-radius: 5px;
-    height: 8px;
-    text-align: center;
-    color: transparent;
-}}
-QProgressBar::chunk {{ background: {CYAN}; border-radius: 5px; }}
-"""
-
 
 class ResultPanel(QWidget):
     paste_requested = pyqtSignal(str)
@@ -87,9 +75,7 @@ class ResultPanel(QWidget):
         self.status.setStyleSheet(f"color: {MUTED}; font-size: 12px;")
         layout.addWidget(self.status)
 
-        self.bar = QProgressBar()
-        self.bar.setStyleSheet(BAR_CSS)
-        self.bar.setTextVisible(False)
+        self.bar = BrandLoader(orb_size=30)
         self.bar.hide()
         layout.addWidget(self.bar)
 
@@ -154,8 +140,8 @@ class ResultPanel(QWidget):
             self._busy_since = time.monotonic()
             self.status.setText(label)
             self.status.setStyleSheet(f"color: {CYAN}; font-size: 12px;")
-            self.bar.setRange(0, 0)   # indeterminada: no sabemos cuanto tardara
-            self.bar.show()
+            self.bar.set_fraction(None)   # no sabemos cuánto tardará
+            self.bar.start()
             self.cancel_button.show()
             self.paste_button.setEnabled(False)
             for button in self.action_buttons:
@@ -163,7 +149,7 @@ class ResultPanel(QWidget):
             self._tick.start()
         else:
             self._tick.stop()
-            self.bar.hide()
+            self.bar.stop()
             self.cancel_button.hide()
             self.status.setText("Listo para pegar, o pule un poco más")
             self.status.setStyleSheet(f"color: {MUTED}; font-size: 12px;")

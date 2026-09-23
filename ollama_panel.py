@@ -13,11 +13,12 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
+
+from brand_loader import BrandLoader
 
 WIDTH = 470
 BG = "#171022"
@@ -41,15 +42,6 @@ QPushButton {{
 QPushButton:hover {{ background: {hot}; }}
 QPushButton:disabled {{ background: #1C1530; color: #6B6280; }}
 """
-
-BAR_CSS = f"""
-QProgressBar {{
-    background: #0F0A16; border: none; border-radius: 5px; height: 10px;
-    text-align: center; color: transparent;
-}}
-QProgressBar::chunk {{ background: {CYAN}; border-radius: 5px; }}
-"""
-
 
 class OllamaPanel(QWidget):
     install_requested = pyqtSignal()
@@ -101,9 +93,7 @@ class OllamaPanel(QWidget):
         self.status.hide()
         layout.addWidget(self.status)
 
-        self.bar = QProgressBar()
-        self.bar.setStyleSheet(BAR_CSS)
-        self.bar.setTextVisible(False)
+        self.bar = BrandLoader(orb_size=30)
         self.bar.hide()
         layout.addWidget(self.bar)
 
@@ -134,8 +124,8 @@ class OllamaPanel(QWidget):
         self.install_button.setEnabled(False)
         self.status.show()
         self.status.setText("Preparando la instalación...")
-        self.bar.setRange(0, 0)
-        self.bar.show()
+        self.bar.set_fraction(None)
+        self.bar.start()
         self.install_requested.emit()
 
     def set_status(self, text: str) -> None:
@@ -145,14 +135,10 @@ class OllamaPanel(QWidget):
     def set_fraction(self, fraction: float) -> None:
         """Descarga con porcentaje real cuando Ollama lo informa; mientras
         no lo informa, la barra se queda indeterminada."""
-        if fraction < 0:
-            self.bar.setRange(0, 0)
-            return
-        self.bar.setRange(0, 100)
-        self.bar.setValue(int(max(0.0, min(1.0, fraction)) * 100))
+        self.bar.set_fraction(None if fraction < 0 else fraction)
 
     def finish(self, message: str) -> None:
-        self.bar.hide()
+        self.bar.stop()
         self.install_button.setEnabled(True)
         self.set_status(message)
 
