@@ -21,7 +21,11 @@ warn() { printf '\n\033[1;33m[!] %s\033[0m\n' "$*"; }
 ask_yes() {
     # Con "curl | bash" la entrada es el propio script: se pregunta a la terminal.
     local answer=""
-    { read -r -p "    $1 [S/n] " answer </dev/tty; } 2>/dev/null || answer=""
+    # La pregunta se escribe en la propia terminal: si no hay terminal
+    # (instalación desatendida) se da por buena la respuesta "sí".
+    if { printf '\n    %s [S/n] ' "$1" >/dev/tty; } 2>/dev/null; then
+        read -r answer </dev/tty || answer=""
+    fi
     case "$answer" in n|N|no|No|NO) return 1 ;; *) return 0 ;; esac
 }
 
