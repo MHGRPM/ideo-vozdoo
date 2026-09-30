@@ -14,7 +14,9 @@ from pynput import keyboard as pkb
 log = logging.getLogger("vozdoo")
 
 
-def paste_text(text: str, auto_paste: bool) -> None:
+def paste_text(text: str, auto_paste: bool) -> str | None:
+    """Pega `text` y devuelve lo que había antes en el portapapeles (que se
+    restaura al terminar)."""
     previous = None
     try:
         previous = pyperclip.paste()
@@ -25,10 +27,10 @@ def paste_text(text: str, auto_paste: bool) -> None:
         pyperclip.copy(text)
     except Exception as exc:
         log.warning("No se pudo copiar al portapapeles (%s). Texto: %s", exc, text)
-        return
+        return previous
 
     if not auto_paste:
-        return
+        return previous
 
     controller = pkb.Controller()
     modifier = pkb.Key.cmd if sys.platform == "darwin" else pkb.Key.ctrl
@@ -38,7 +40,7 @@ def paste_text(text: str, auto_paste: bool) -> None:
             controller.release("v")
     except Exception as exc:
         log.warning("No se pudo simular Ctrl+V (%s). El texto sigue en el portapapeles.", exc)
-        return
+        return previous
 
     if previous is not None:
         def restore():
@@ -49,3 +51,4 @@ def paste_text(text: str, auto_paste: bool) -> None:
                 pass
 
         threading.Thread(target=restore, daemon=True).start()
+    return previous

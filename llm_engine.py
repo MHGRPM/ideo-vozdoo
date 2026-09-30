@@ -11,7 +11,11 @@ from __future__ import annotations
 
 import requests
 
-TIMEOUT = 180   # un prompt profesional largo en CPU no sale en 60 s
+TIMEOUT = 240   # un prompt profesional largo en CPU no sale en 60 s
+DEFAULT_OLLAMA_MODEL = "qwen3:4b-instruct"
+# Mantener el modelo cargado en memoria entre órdenes: la primera tarda en
+# cargar desde disco, las siguientes empiezan a escribir al momento.
+KEEP_ALIVE = "30m"
 
 DEFAULT_SYSTEM = (
     "Eres un editor profesional de textos en español de España. Devuelves "
@@ -21,8 +25,8 @@ DEFAULT_SYSTEM = (
 
 def build_prompt(text: str, instruction: str) -> str:
     return (
-        f"Instrucción: {instruction}\n\n"
-        f"Texto dictado:\n{text}\n\n"
+        f"ENCARGO: {instruction}\n\n"
+        f"TEXTO SOBRE EL QUE TRABAJAR:\n<<<\n{text}\n>>>\n\n"
         "Devuelve SOLO el resultado."
     )
 
@@ -61,6 +65,7 @@ class OllamaEngine(LLMEngine):
                 "prompt": prompt,
                 "system": system,
                 "stream": False,
+                "keep_alive": KEEP_ALIVE,
                 "options": {"temperature": temperature, "num_ctx": 8192},
             },
             timeout=TIMEOUT,
@@ -69,9 +74,18 @@ class OllamaEngine(LLMEngine):
         return resp.json()["response"].strip()
 
     def is_available(self) -> bool:
-        from ollama_setup import is_ollama_running
+        from ollama_setup import has_model, is_ollama_running
 
-        return is_ollama_running(self.host)
+        return is_ollama_running(self.host) and has_model(self.host, self.model)
+
+    def warm_up(self) -> None:
+        """Carga el modelo en memoria sin generar nada, para que la primera
+        orden del día no espere a leerlo del disco."""
+        requests.post(
+            f"{self.host}/api/generate",
+            json={"model": self.model, "keep_alive": KEEP_ALIVE},
+            timeout=TIMEOUT,
+        )
 
 
 class ApiKeyEngine(LLMEngine):
@@ -123,5 +137,5 @@ def get_engine(env: dict[str, str]) -> LLMEngine:
         )
     return OllamaEngine(
         host=env.get("VOZDOO_LLM_HOST", "http://localhost:11434"),
-        model=env.get("VOZDOO_LLM_MODEL", "qwen2.5:3b-instruct"),
+        model=env.get("VOZDOO_LLM_MODEL") or DEFAULT_OLLAMA_MODEL,
     )

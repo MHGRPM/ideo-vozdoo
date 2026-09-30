@@ -1,349 +1,222 @@
 # Vozdoo
 
-Dictado por voz local, tipo WisprFlow pero gratis y 100% local: mantienes
-pulsada una tecla, hablas, sueltas, y el texto transcrito se pega donde
-tengas el cursor (o se copia al portapapeles).
+**Habla y escribe. Pídele y te lo mejora.** Dictado por voz y asistente de
+textos y prompts, gratis y 100 % en tu ordenador.
 
-Nada sale de tu ordenador: la transcripción corre en local con
-[faster-whisper](https://github.com/SYSTAN/faster-whisper). No hay claves
-de API, no hay nube, no hay coste por uso. Sin LLM, sin asistente, sin
-nada más: solo escucha y escribe lo que dices.
+- **Dictar:** mantienes pulsada una tecla, hablas, sueltas, y el texto se
+  escribe donde tengas el cursor (correo, documento, chat...).
+- **Asistente:** con otra tecla le pides cosas en voz alta:
+  *"optimiza prompt profesional"*, *"pasa esto a texto legal"*,
+  *"hazlo persuasivo"*, *"conviértelo en un correo"*... y te lo devuelve
+  listo para pegar.
 
----
-
-## Guía rápida
-
-**Instalar (solo la primera vez):**
-
-*Windows* — abre PowerShell y pega esto, línea por línea:
-```powershell
-git clone https://github.com/MHGRPM/ideo-vozdoo.git
-cd ideo-vozdoo
-.\start-vozdoo.ps1
-```
-
-*Linux* — abre una terminal y pega esto, línea por línea:
-```bash
-sudo apt install python3 python3-venv python3-pip git libportaudio2 xclip libxcb-cursor0
-git clone https://github.com/MHGRPM/ideo-vozdoo.git
-cd ideo-vozdoo
-./start-vozdoo.sh
-```
-
-*Mac* — abre una terminal y pega esto, línea por línea:
-```bash
-brew install python3 portaudio git
-git clone https://github.com/MHGRPM/ideo-vozdoo.git
-cd ideo-vozdoo
-./start-vozdoo.sh
-```
-
-La primera vez tarda 2-3 minutos descargando cosas — es normal, deja que
-termine. Cuando veas el mensaje `Vozdoo listo...`, ya puedes usarlo.
-
-**Usar:**
-
-1. Mantén pulsado **Ctrl + Win**
-2. Habla
-3. Suelta
-4. El texto sale escrito donde tuvieras el cursor
-
-**Para pararlo:** `Ctrl+C` en esa misma ventana, o ciérrala.
-
-**Para volver a usarlo otro día:** abre una terminal, entra en la carpeta
-y vuelve a lanzar el mismo comando de instalación (`./start-vozdoo.sh` o
-`.\start-vozdoo.ps1`) — esta vez arranca en segundos.
-
-Si algo no funciona a la primera, sigue leyendo más abajo: está todo
-explicado con más detalle y con soluciones a los problemas más comunes.
+Nada sale de tu ordenador: la voz la transcribe Whisper y los textos los
+trabaja una IA local (Ollama). Sin cuentas, sin claves, sin coste por uso.
 
 ---
 
-## 1. Antes de instalar (requisitos del sistema)
+## Instalar (un solo paso)
 
-Necesitas Python 3.10 o superior y `git`. Comprueba si ya los tienes:
-
-```bash
-python3 --version   # o "python --version" en Windows
-git --version
-```
-
-Si falta alguno, instálalo primero según tu sistema:
+El instalador lo pone todo: el programa, la IA local, el motor de voz y un
+acceso directo. **No necesitas tener nada instalado antes.** Tarda unos
+10 minutos la primera vez (descarga unos 3 GB); déjalo terminar.
 
 ### Windows
 
-1. Descarga Python desde https://www.python.org/downloads/ e instálalo.
-   **Importante**: marca la casilla "Add python.exe to PATH" durante la
-   instalación.
-2. Instala Git desde https://git-scm.com/downloads (si no lo tienes ya).
+1. Pulsa la tecla **Windows**, escribe **PowerShell** y ábrelo.
+2. Copia esta línea, pégala (clic derecho) y pulsa **Enter**:
 
-### Linux (Ubuntu/Debian)
-
-```bash
-sudo apt update
-sudo apt install python3 python3-venv python3-pip git libportaudio2 libxcb-cursor0
+```powershell
+irm https://raw.githubusercontent.com/MHGRPM/ideo-vozdoo/main/install.ps1 | iex
 ```
 
-- `python3-venv` es imprescindible: sin él, el script falla al crear el
-  entorno virtual con un error tipo "ensurepip is not available".
-- `libportaudio2` es necesario para que la librería que graba el
-  micrófono (`sounddevice`) funcione.
-- Además necesitas una utilidad de portapapeles (para pegar el texto
-  automáticamente): instala **una** de estas dos, no hace falta ambas:
-  ```bash
-  sudo apt install xclip
-  # o, alternativamente:
-  sudo apt install xsel
-  ```
-  Si usas Wayland, instala `wl-clipboard` en su lugar.
+> Otra forma: arriba en esta página, botón verde **Code → Download ZIP**,
+> descomprímelo y haz doble clic en **`Instalar-Vozdoo.bat`**. Si Windows
+> avisa de que "protegió tu PC", pulsa *Más información → Ejecutar de
+> todas formas*.
 
 ### Mac
 
+1. Abre **Terminal** (Cmd + Espacio, escribe "Terminal").
+2. Copia esta línea, pégala y pulsa **Enter**:
+
 ```bash
-brew install python3 portaudio git
+curl -fsSL https://raw.githubusercontent.com/MHGRPM/ideo-vozdoo/main/install.sh | bash
 ```
+
+La primera vez que lo abras, el Mac te pedirá permiso para el
+**Micrófono** y para **Accesibilidad / Supervisión de entrada**. Acéptalos
+en *Ajustes del Sistema → Privacidad y seguridad* y vuelve a abrir Vozdoo
+desde *Aplicaciones*.
+
+### Linux (Ubuntu, Debian, Fedora...)
+
+1. Abre una **Terminal** (Ctrl + Alt + T).
+2. Copia esta línea, pégala y pulsa **Enter** (te pedirá tu contraseña):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/MHGRPM/ideo-vozdoo/main/install.sh | bash
+```
+
+Al terminar, Vozdoo se abre solo y queda un icono **Vozdoo** en el
+escritorio y en el menú de aplicaciones. El instalador te pregunta si
+quieres que arranque solo al encender el ordenador.
+
+**Para actualizar** a la última versión: repite el mismo paso. Conserva
+tus ajustes.
 
 ---
 
-## 2. Instalación
+## Usar
 
-Clona el repositorio y entra en la carpeta:
+Verás una bola brillante en una esquina de la pantalla.
 
-```bash
-git clone https://github.com/MHGRPM/ideo-vozdoo.git
-cd ideo-vozdoo
-```
-
-Lanza el instalador de tu sistema operativo:
-
-**Windows** (PowerShell):
-```powershell
-.\start-vozdoo.ps1
-```
-
-**Linux / Mac**:
-```bash
-./start-vozdoo.sh
-```
-
-Si en Linux/Mac te da `Permission denied`, ejecútalo así en su lugar:
-```bash
-bash start-vozdoo.sh
-```
-
-### Qué hace el instalador y qué vas a ver
-
-El script hace 4 cosas, y va imprimiendo en qué paso está:
-
-1. `==> Creando entorno virtual...` — solo la primerísima vez.
-2. `==> Instalando dependencias...` — **esto puede tardar 1-3 minutos** la
-   primera vez porque descarga el motor de Whisper (varios cientos de MB).
-   Vas a ver mucho texto de `pip` descargando paquetes: es normal, no está
-   colgado.
-3. `==> Creado .env con valores por defecto...` — solo la primera vez.
-4. `==> Arrancando Vozdoo...` — descarga el modelo de voz (~244MB) la
-   primera vez (otro medio minuto), luego arranca. Cuando veas:
-   ```
-   Vozdoo listo. 'ctrl+win' dicta y pega. 'alt+win' dicta y pulir con IA. Ctrl+C para salir.
-   ```
-   ya está listo para usar.
-
-Las siguientes veces que lo arranques, todo esto es prácticamente
-instantáneo (ya está todo descargado e instalado).
-
----
-
-## 3. Uso
-
-1. Mantén pulsados **Ctrl + Win** (hotkey por defecto)
-2. Habla
-3. Suelta
-4. El texto aparece pegado donde tuvieras el cursor (o copiado al
-   portapapeles, según `VOZDOO_AUTO_PASTE` — ver configuración abajo)
-
-Para parar Vozdoo: `Ctrl+C` en la ventana donde lo lanzaste, o simplemente
-cerrarla.
-
-Para volver a arrancarlo otro día, repite el mismo comando
-(`./start-vozdoo.sh` o `.\start-vozdoo.ps1`) desde dentro de la carpeta
-`ideo-vozdoo`.
-
----
-
-## El orbe: dictar y pulir con IA
-
-Al arrancar Vozdoo aparece un orbe pequeño flotando en una esquina de la
-pantalla. En reposo está quieto y no gasta nada; el vídeo solo se
-reproduce mientras te está escuchando.
-
-| Gesto | Qué hace |
+| Quiero... | Cómo |
 |---|---|
-| Mantener pulsado el orbe | Graba mientras lo sujetas. Al soltar, transcribe y te ofrece las acciones |
-| Botón derecho | Abre las mini-burbujas. Con algo dictado, las acciones de IA; sin nada dictado, tamaño y salir |
-| Arrastrar | Lo mueves donde quieras. Recuerda la posición para la próxima vez |
-| Rueda del ratón | Lo hace más grande o más pequeño (de 28 a 140 px) |
-| **Alt + Win** | Lo mismo que mantenerlo pulsado, pero desde el teclado |
+| **Dictar** | Mantén pulsado **Ctrl + Win**, habla, suelta. Se escribe donde tengas el cursor. |
+| **Pedirle algo al asistente** | Mantén pulsado **Alt + Win**, di la orden, suelta. |
+| Ver todas las opciones | **Botón derecho** sobre la bola. |
+| Moverla o cambiar su tamaño | Arrástrala / rueda del ratón encima. |
 
-Las acciones son: pegar tal cual, más formal, mejorar prompt, corregir y
-resumir. Al elegir una, el texto pasa por la IA y aparece un panel donde
-puedes **retocarlo antes de pegarlo**.
+(En Mac, "Win" es la tecla **Cmd** y "Alt" es **Option**.)
 
-### El panel: la mesa de trabajo
+### Qué le puedes pedir al asistente
 
-Al elegir una acción aparece un panel oscuro con el resultado. Ahí puedes:
+Di la orden y, si quieres, el texto seguido:
 
-- **Editarlo a mano** antes de nada.
-- **Encadenar acciones** sobre lo que ya hay: corregir, luego hacerlo más
-  formal, luego resumir. Cada botón trabaja sobre el texto que ves, no
-  sobre el original.
-- **Pegar donde estabas** — el correo, el documento, el chat — con el
-  botón de abajo.
+> *"Optimiza prompt profesional: quiero un plan para captar clientes en
+> el sector de la hostelería"*
 
-Mientras la IA trabaja verás una barra de carga con los segundos que
-lleva. En un portátil sin tarjeta gráfica, pulir una frase son unos 8
-segundos y escribir un prompt profesional completo puede irse a 40. Si se
-te hace largo, **Cancelar** te devuelve el panel al momento.
+> *"Pasa a persuasivo: nuestro programa ayuda a las tiendas a llevar el
+> stock y facturar"*
 
-### La IA local (Ollama)
+Si **no dices el texto**, trabaja sobre lo último que dictaste o lo
+último que copiaste (Ctrl + C). Por ejemplo: copias un párrafo de un
+contrato, pulsas Alt + Win y dices *"ponlo sencillo"*.
 
-Vozdoo pule los textos con Ollama **en tu propio ordenador**. No se envía
-nada a ningún servidor: ni tus dictados, ni los textos de tus clientes.
+| Dile... | Y hace |
+|---|---|
+| "optimiza prompt profesional", "mejora el prompt" | Un prompt completo para ChatGPT, Claude o Gemini: rol, objetivo, contexto, pasos, restricciones, formato y criterios de calidad |
+| "prompt de imagen" | Un prompt para generar imágenes (en inglés, con su traducción) |
+| "hazlo persuasivo", "que venda" | Texto comercial que convence, con llamada a la acción |
+| "pásalo a texto legal", "tipo contrato" | Lenguaje jurídico formal y preciso |
+| "más formal", "profesional" | Tono de trabajo, claro y educado |
+| "conviértelo en un correo" | Correo listo para enviar, con asunto |
+| "hazlo post de LinkedIn" | Publicación con gancho, párrafos cortos y pregunta final |
+| "más cercano", "informal" | Tono amable y natural |
+| "ponlo sencillo", "fácil" | Lenguaje claro que entiende cualquiera |
+| "en puntos", "esquema" | Viñetas ordenadas |
+| "resúmelo" / "amplíalo" | Más corto / más desarrollado |
+| "tradúcelo al inglés" | Traducción profesional |
+| "corrígelo" | Solo ortografía, acentos y puntuación |
+| **Cualquier otra cosa** ("hazlo más gracioso", "ponlo en una tabla") | Lo hace tal cual se lo pidas |
 
-Si no lo tienes instalado, la primera vez que uses una acción de IA
-aparecerá un panel que te lo explica y te lo instala con un botón, con la
-descarga del modelo a la vista. También te enseña el comando por si
-prefieres hacerlo tú:
+El resultado aparece en un panel (**la mesa de trabajo**) donde puedes
+retocarlo, seguir pidiéndole cambios (con botones, con "Más modos" o
+escribiendo en *"Pídele otra cosa"*) y pulsar **Pegar donde estaba**.
 
-```
-curl -fsSL https://ollama.com/install.sh | sh
-ollama pull qwen2.5:3b-instruct
-```
+Truco: también funciona con la tecla de dictar si empiezas la frase con la
+orden ("optimiza prompt profesional...", "pasa esto a legal"). Si
+simplemente dictas, se escribe tal cual.
 
-En Windows se descarga el instalador oficial de ollama.com y luego el
-modelo.
+**Cuánto tarda:** en un portátil normal, corregir o cambiar el tono de un
+párrafo son 10-30 segundos; un prompt profesional largo, 1-2 minutos. El
+panel te va contando los segundos y puedes cancelar cuando quieras.
 
-El modelo por defecto (`qwen2.5:3b-instruct`, unos 2 GB) va rápido en
-cualquier portátil. Si quieres más calidad y no te importa esperar,
-cambia `VOZDOO_LLM_MODEL` en el `.env` por uno mayor, por ejemplo
-`qwen2.5:7b-instruct`.
+### Chatear con el asistente
 
-Si prefieres tu propia clave de API (OpenAI o Gemini), configúrala en
-`.env` (`VOZDOO_LLM_API_KEY`) y se usará esa en su lugar, sin necesidad
-de Ollama.
-
-El dictado normal (`Ctrl + Win`) sigue funcionando igual y no depende del
-orbe para nada: si PyQt6 no arranca en tu equipo, pierdes el orbe pero no
-el dictado.
+El instalador crea en Ollama un asistente llamado **vozdoo** con todo este
+conocimiento. Si abres la app de **Ollama** y eliges el modelo `vozdoo`,
+puedes chatear con él escribiendo, igual que con ChatGPT pero en local.
 
 ---
 
-## 4. Configuración (`.env`)
+## Si algo no va
 
-El instalador crea un archivo `.env` la primera vez (copiado de
-`.env.example`). Ábrelo con cualquier editor de texto para cambiar estos
-valores:
+| Problema | Solución |
+|---|---|
+| No veo la bola | Pulsa Alt + Win: la trae a tu pantalla. Si no, abre Vozdoo desde el icono. |
+| La tecla no hace nada (Linux) | Tu sesión puede ser Wayland. En la pantalla de inicio de sesión elige "Ubuntu en Xorg". |
+| Escribe mal nombres o palabras técnicas | En el archivo `.env` de la carpeta Vozdoo cambia `VOZDOO_WHISPER_MODEL=small` por `medium`. |
+| El asistente dice que falta la IA | Pulsa el botón **Instalar** del panel que aparece, o repite la instalación. |
+| Va lento el asistente | Normal sin tarjeta gráfica. Con poca memoria (8 GB) pon `VOZDOO_LLM_MODEL=qwen2.5:3b-instruct` en `.env`. |
+| Otra cosa | Mira el archivo `vozdoo.log` dentro de la carpeta Vozdoo y compártelo. |
+
+Vozdoo se instala en la carpeta **Vozdoo** de tu usuario. Para
+desinstalarlo, borra esa carpeta y el icono del escritorio.
+
+---
+---
+
+## Detalles técnicos
+
+### Qué instala
+
+| Pieza | Para qué |
+|---|---|
+| `uv` + Python 3.12 propio en `Vozdoo/.venv` | No toca ningún Python del sistema |
+| `faster-whisper` (modelo `small`, ~250 MB) | Voz a texto, en CPU |
+| Ollama + `qwen3:4b-instruct` (~2,5 GB) | La IA del asistente, local |
+| Modelo `vozdoo` en Ollama | El mismo modelo con el conocimiento del asistente dentro, para chatear |
+| PyQt6 | La bola, las burbujas y el panel |
+| Linux: `libportaudio2`, `xclip`, `libxcb-cursor0` | Micrófono, portapapeles y ventanas Qt |
+
+### Cómo funciona el asistente
+
+- `polish_actions.py` — el conocimiento: cada modo es un "experto" con su
+  propio prompt de sistema (ingeniero de prompts, copywriter, abogado,
+  editor, traductor...) y las palabras con las que se le pide por voz.
+  Añadir un modo nuevo es añadir una entrada aquí.
+- `voice_commands.py` — entiende la orden hablada sin llamar al modelo
+  (palabras clave, instantáneo): qué modo, sobre qué texto y cualquier
+  matiz ("pásalo a LinkedIn *para inspirar a otros PMs*: ...").
+- `llm_engine.py` — manda el prompt de sistema en su campo y el encargo
+  aparte; mantiene el modelo cargado 30 min para que las siguientes
+  órdenes empiecen al momento.
+- `ollama_setup.py prepare <modelo>` — descarga el modelo y crea el
+  asistente `vozdoo` (lo usa el instalador).
+
+### Configuración (`.env`)
 
 | Variable | Por defecto | Qué hace |
 |---|---|---|
-| `VOZDOO_HOTKEY` | `ctrl+win` | Tecla o combo (`ctrl+alt+d`, `f9`...) |
+| `VOZDOO_HOTKEY` | `ctrl+win` | Tecla de dictar (`ctrl+alt+d`, `f9`...) |
+| `VOZDOO_POLISH_HOTKEY` | `alt+win` | Tecla del asistente |
 | `VOZDOO_WHISPER_MODEL` | `small` | `tiny`/`base`/`small`/`medium`/`large-v3` |
 | `VOZDOO_WHISPER_LANGUAGE` | `es` | Idioma forzado |
 | `VOZDOO_WHISPER_DEVICE` | `auto` | `auto`/`cpu`/`cuda` |
 | `VOZDOO_MIC_DEVICE` | (vacío) | Índice de micro, ver `list_devices.py` |
 | `VOZDOO_MAX_RECORDING_SECONDS` | `30` | Corte automático |
 | `VOZDOO_AUTO_PASTE` | `true` | `false` = solo copia, no pega solo |
-| `VOZDOO_POLISH_HOTKEY` | `alt+win` | Tecla o combo para "dictar y pulir con IA" |
-| `VOZDOO_LLM_API_KEY` | (vacío) | Si la rellenas, se usa tu API en vez de Ollama local |
-| `VOZDOO_LLM_API_URL` | `https://api.openai.com/v1/chat/completions` | Endpoint de la API (OpenAI, Gemini vía capa de compatibilidad...) |
-| `VOZDOO_LLM_API_MODEL` | `gpt-4o-mini` | Modelo a usar con la API key |
-| `VOZDOO_LLM_MODEL` | `qwen2.5:3b-instruct` | Modelo de Ollama local (si no hay API key) |
-| `VOZDOO_LLM_HOST` | `http://localhost:11434` | URL de Ollama local |
+| `VOZDOO_LLM_MODEL` | `qwen3:4b-instruct` | Modelo de Ollama |
+| `VOZDOO_LLM_HOST` | `http://localhost:11434` | URL de Ollama |
+| `VOZDOO_LLM_API_KEY` | (vacío) | Si la rellenas, se usa tu API (OpenAI, Gemini...) en vez de Ollama |
+| `VOZDOO_LLM_API_URL` | OpenAI | Endpoint compatible con chat completions |
+| `VOZDOO_LLM_API_MODEL` | `gpt-4o-mini` | Modelo de la API |
 
-Si tu micro por defecto no es el correcto, con el entorno activado
-ejecuta:
+Tras cambiar el `.env`, cierra Vozdoo (botón derecho → Cerrar) y vuelve a
+abrirlo.
+
+### Instalación manual (desarrolladores)
+
 ```bash
-python list_devices.py
-```
-y pon el número que te interese en `VOZDOO_MIC_DEVICE`.
-
-Tras cambiar el `.env`, tienes que parar Vozdoo (`Ctrl+C`) y volver a
-arrancarlo para que se aplique.
-
----
-
-## 5. Solución de problemas
-
-**"ensurepip is not available" al crear el entorno virtual (Linux)**
-Falta el paquete del sistema: `sudo apt install python3-venv`.
-
-**Parece colgado en "Instalando dependencias..."**
-Es normal la primera vez (1-3 minutos, descarga el motor de Whisper).
-Si llevas más de 5 minutos sin ningún cambio en pantalla, corta con
-`Ctrl+C` y vuelve a lanzar el script — suele ser un corte de red.
-
-**`OSError` o "PortAudio library not found" al arrancar**
-Falta la librería del sistema: `sudo apt install libportaudio2` (Linux)
-o `brew install portaudio` (Mac).
-
-**No pega el texto donde el cursor, o da error de portapapeles (Linux)**
-Falta `xclip` o `xsel`: `sudo apt install xclip`. En Wayland,
-`sudo apt install wl-clipboard`.
-
-**El hotkey no reacciona a nada (Linux)**
-Si tu sesión es Wayland puro (sin XWayland), la librería que detecta
-teclas globales (`pynput`) puede no funcionar. Comprueba tu tipo de
-sesión con `echo $XDG_SESSION_TYPE`. Si dice `wayland` y no funciona,
-prueba a iniciar sesión en modo "Ubuntu en Xorg"/X11 desde la pantalla
-de login.
-
-**Se transcribe mal / no pilla nombres propios o jerga del equipo**
-Sube el modelo a `medium` en `.env` (`VOZDOO_WHISPER_MODEL=medium`) —
-más preciso, algo más lento.
-
-**Quiero reinstalar desde cero**
-Borra la carpeta `.venv` y el archivo `.env`, y vuelve a lanzar el
-script:
-```bash
-rm -rf .venv .env
-./start-vozdoo.sh
+git clone https://github.com/MHGRPM/ideo-vozdoo.git
+cd ideo-vozdoo
+./start-vozdoo.sh          # Windows: .\start-vozdoo.ps1
 ```
 
-Si algo no está en esta lista, mira el mensaje de error completo en la
-terminal (o en `vozdoo.log`) y compártelo para que se pueda añadir aquí.
+`start-vozdoo.sh` / `.ps1` crean el entorno con el Python del sistema y
+arrancan con la consola abierta (útil para ver el log). Ollama y el
+modelo se instalan aparte (`ollama pull qwen3:4b-instruct`) o desde el
+panel que aparece la primera vez que se usa el asistente.
 
----
+Tests: `.venv/bin/python -m pip install -r requirements-dev.txt && .venv/bin/python -m pytest`.
 
-## 6. Notas sobre el modelo
+### Notas
 
-- `small` (244MB) va bien en CPU en portátiles normales.
-- Si tienes GPU NVIDIA con drivers CUDA 12.x, `VOZDOO_WHISPER_DEVICE=cuda`
-  baja la latencia notablemente. Si tu CUDA es 13.x puede fallar
-  (`cublas64_12.dll`) — el script cae solo a CPU en ese caso.
-- Si notáis errores de transcripción con nombres propios o jerga interna,
-  subid a `medium` — más lento pero más preciso.
-
-## 7. Sobre el hotkey
-
-El parser soporta tanto combos hechos solo de teclas modificadoras (como
-el `ctrl+win` que usamos de default: se dispara al tener las dos pulsadas
-a la vez y se corta al soltar cualquiera) como combos con una letra
-(`ctrl+alt+d`) o teclas sueltas (`f9`), por si prefieres cambiarlo en tu
-`.env`.
-
-## 8. Posibles mejoras futuras (no aplicadas, para valorar)
-
-- **Bandeja del sistema / icono de estado**: ahora mismo corre en una
-  ventana de terminal. Un icono en la bandeja (Windows/Linux) con
-  indicador de "grabando" sería más cómodo para uso diario.
-- **Autoarranque**: registrar como tarea programada / servicio de usuario
-  para que arranque solo al iniciar sesión.
-- **Modelo compartido pre-descargado**: si se instala en varios equipos
-  del equipo, descargar el modelo una vez y distribuirlo (o usar un share
-  de red) ahorra esos 244MB por persona.
-- **Vocabulario propio**: `faster-whisper` acepta un `initial_prompt` con
-  términos frecuentes (nombres propios, jerga interna del equipo) para
-  mejorar precisión en esas palabras.
-- **Push-to-talk vs. wake word**: esto es solo push-to-talk (mantener
-  pulsado). Manos libres con palabra de activación ("wake word") es un
-  proyecto aparte, con más piezas (reconocimiento always-on, un modelo de
-  lenguaje local, etc.), no solo Whisper.
+- Un solo Vozdoo a la vez: si ya está abierto, el acceso directo no abre
+  otro.
+- Whisper con GPU NVIDIA (CUDA 12): `VOZDOO_WHISPER_DEVICE=cuda`. Si
+  falla, cae solo a CPU.
+- Wayland puro sin XWayland: `pynput` no puede leer teclas globales;
+  usar sesión X11.

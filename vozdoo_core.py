@@ -5,8 +5,9 @@ transcrito se copia al portapapeles y (opcional) se pega automáticamente
 donde tengas el cursor. 100% local, sin APIs de pago, sustituto de
 herramientas tipo WisprFlow.
 
-Sin LLM, sin voz clonada, sin nada personalizado: solo captura de audio +
-Whisper + inserción de texto.
+Con la otra tecla (Alt+Win) le hablas al asistente: "optimiza prompt
+profesional...", "pasa esto a texto legal", "hazlo persuasivo". Lo
+resuelve un modelo local de Ollama; tampoco sale nada de tu ordenador.
 
 Uso:
     python vozdoo_core.py
@@ -36,19 +37,20 @@ except ImportError:
     # que no debe tumbar el import de todo el módulo: solo se pierde el
     # orbe flotante y el pulido con IA. Ver Vozdoo.run().
     OrbApp = None
-    PolishBubble = None
 
 SCRIPT_DIR = Path(__file__).parent
 ENV_FILE = SCRIPT_DIR / ".env"
 LOG_FILE = SCRIPT_DIR / "vozdoo.log"
 
+_handlers: list[logging.Handler] = [logging.FileHandler(LOG_FILE, encoding="utf-8")]
+if sys.stdout is not None:
+    # Arrancado desde el acceso directo (pythonw en Windows) no hay consola:
+    # solo se escribe en vozdoo.log.
+    _handlers.append(logging.StreamHandler(sys.stdout))
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.FileHandler(LOG_FILE, encoding="utf-8"),
-        logging.StreamHandler(sys.stdout),
-    ],
+    handlers=_handlers,
 )
 for noisy in ("huggingface_hub", "faster_whisper"):
     logging.getLogger(noisy).setLevel(logging.WARNING)
@@ -79,7 +81,7 @@ def load_env() -> dict[str, str]:
         "VOZDOO_LLM_API_KEY": "",
         "VOZDOO_LLM_API_URL": "https://api.openai.com/v1/chat/completions",
         "VOZDOO_LLM_API_MODEL": "gpt-4o-mini",
-        "VOZDOO_LLM_MODEL": "qwen2.5:3b-instruct",
+        "VOZDOO_LLM_MODEL": "qwen3:4b-instruct",
         "VOZDOO_LLM_HOST": "http://localhost:11434",
     }.items():
         if key not in env:
@@ -290,6 +292,15 @@ class Vozdoo:
         self.buffer = AudioBuffer(self.sample_rate, self.max_seconds, self.mic_device)
         self.processing = False
         self.lock = threading.Lock()
+        # Lo último dictado y lo que había en el portapapeles en ese momento:
+        # así "pasa esto a legal" sabe si hablas de lo que acabas de dictar
+        # o de algo que has copiado después.
+        self.last_dictation = ""
+        self.clipboard_at_dictation: str | None = None
+
+    def remember_dictation(self, text: str, clipboard_before: str | None) -> None:
+        self.last_dictation = text
+        self.clipboard_at_dictation = clipboard_before
 
     def _start_recording(self, mode: str) -> None:
         with self.lock:
@@ -318,7 +329,12 @@ class Vozdoo:
             if not text:
                 log.info("Audio vacío o sin voz, nada que hacer")
                 return
-            paste_text(text, self.auto_paste)
+            if self.orb_app is not None:
+                # También por esta tecla se puede dar una orden ("pasa esto
+                # a legal"): si lo es, la resuelve el orbe en vez de pegar.
+                self.orb_app.bridge.dictated.emit(text)
+                return
+            self.remember_dictation(text, paste_text(text, self.auto_paste))
             log.info("Pegado en la ventana activa" if self.auto_paste else "Copiado al portapapeles")
         except Exception:
             log.exception("Error transcribiendo/procesando")
@@ -428,7 +444,7 @@ class Vozdoo:
                 log.exception("Error en on_release")
 
         log.info(
-            "Vozdoo listo. '%s' dicta y pega. '%s' dicta y pulir con IA. Ctrl+C para salir.",
+            "Vozdoo listo. '%s' dicta y pega. '%s' habla con el asistente. Ctrl+C para salir.",
             self.env["VOZDOO_HOTKEY"],
             self.env["VOZDOO_POLISH_HOTKEY"],
         )
@@ -453,7 +469,31 @@ class Vozdoo:
                 log.info("Saliendo...")
 
 
+_INSTANCE_PORT = 47631
+_instance_socket = None
+
+
+def already_running() -> bool:
+    """Un solo Vozdoo a la vez: si arranca con el ordenador y además se
+    pulsa el acceso directo, dos orbes pegarían todo dos veces."""
+    import socket
+
+    global _instance_socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(("127.0.0.1", _INSTANCE_PORT))
+        sock.listen(1)
+    except OSError:
+        sock.close()
+        return True
+    _instance_socket = sock
+    return False
+
+
 def main() -> int:
+    if already_running():
+        log.info("Vozdoo ya está abierto (mira la esquina de la pantalla).")
+        return 0
     env = load_env()
     vozdoo = Vozdoo(env)
     vozdoo.run()

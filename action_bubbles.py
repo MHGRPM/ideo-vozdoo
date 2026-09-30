@@ -5,8 +5,6 @@ de cualquier burbuja las cierra, sin tener que perseguir el foco."""
 
 from __future__ import annotations
 
-import math
-
 from PyQt6.QtCore import QPoint, QPointF, QRectF, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import (
     QColor,
@@ -83,26 +81,31 @@ class ActionBubbles(QWidget):
     # ------------------------------------------------------------------
 
     def _layout(self) -> list[QRectF]:
-        """Las burbujas se abren en abanico hacia el centro de la pantalla,
-        que es donde hay sitio: el orbe suele vivir pegado a una esquina."""
-        area = self.rect()
-        to_center = QPointF(area.center()) - self.center
-        base_angle = math.atan2(to_center.y(), to_center.x())
+        """Las burbujas salen en una columna curvada hacia el centro de la
+        pantalla, que es donde hay sitio: el orbe suele vivir pegado a una
+        esquina. En columna no se pisan aunque haya muchas; la curva (las
+        del medio un poco mas lejos) mantiene el aire de abanico."""
+        area = QRectF(self.rect())
         count = len(self.actions)
-        spread = math.radians(96)
-        start = base_angle - spread / 2
-        step = spread / max(1, count - 1)
-        radius = self.orb_radius + 86
+        step = BUBBLE_H + GAP
+        total_h = count * BUBBLE_H + (count - 1) * GAP
+        top = self.center.y() - total_h / 2
+        top = max(area.top() + 10, min(top, area.bottom() - 10 - total_h))
+        toward_left = self.center.x() > area.center().x()
+        half = max(1.0, total_h / 2)
 
         rects: list[QRectF] = []
         for i, (label, _) in enumerate(self.actions):
-            angle = start + step * i
             width = self.metrics.horizontalAdvance(label) + PAD_X * 2
-            cx = self.center.x() + math.cos(angle) * (radius + width * 0.25)
-            cy = self.center.y() + math.sin(angle) * radius
-            rects.append(
-                QRectF(cx - width / 2, cy - BUBBLE_H / 2, width, BUBBLE_H)
-            )
+            cy = top + i * step + BUBBLE_H / 2
+            bend = 1 - min(1.0, abs(cy - (top + half)) / half) ** 2
+            offset = self.orb_radius + 24 + 36 * bend
+            if toward_left:
+                x = self.center.x() - offset - width
+            else:
+                x = self.center.x() + offset
+            x = max(area.left() + 10, min(x, area.right() - 10 - width))
+            rects.append(QRectF(x, cy - BUBBLE_H / 2, width, BUBBLE_H))
         return rects
 
     def _arm(self) -> None:

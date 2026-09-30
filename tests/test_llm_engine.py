@@ -82,7 +82,23 @@ def test_api_key_engine_is_available_is_always_true():
 
 
 def test_ollama_engine_is_available_delegates_to_ollama_setup():
-    with patch("ollama_setup.is_ollama_running", return_value=True) as mock_check:
+    with patch("ollama_setup.is_ollama_running", return_value=True) as mock_check, patch(
+        "ollama_setup.has_model", return_value=True
+    ) as mock_model:
         engine = OllamaEngine(host="http://localhost:11434", model="m")
         assert engine.is_available() is True
         mock_check.assert_called_once_with("http://localhost:11434")
+        mock_model.assert_called_once_with("http://localhost:11434", "m")
+
+
+def test_ollama_engine_not_available_without_model():
+    with patch("ollama_setup.is_ollama_running", return_value=True), patch(
+        "ollama_setup.has_model", return_value=False
+    ):
+        engine = OllamaEngine(host="http://localhost:11434", model="m")
+        assert engine.is_available() is False
+
+
+def test_default_ollama_model_when_env_empty():
+    engine = get_engine({"VOZDOO_LLM_API_KEY": "", "VOZDOO_LLM_MODEL": ""})
+    assert engine.model == "qwen3:4b-instruct"

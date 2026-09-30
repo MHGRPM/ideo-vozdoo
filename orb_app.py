@@ -23,8 +23,9 @@ from clipboard_paste import paste_text
 from llm_engine import OllamaEngine, get_engine
 from ollama_panel import OllamaPanel
 from orb_widget import OrbWidget
-from polish_actions import ACTIONS, ACTIONS_BY_LABEL
+from polish_actions import ACTIONS, ACTIONS_BY_LABEL, MENU_ACTIONS, free_action
 from result_panel import ResultPanel
+from voice_commands import parse_command
 from x11_focus import FocusKeeper
 
 log = logging.getLogger("vozdoo")
@@ -53,6 +54,7 @@ class Bridge(QObject):
     install_done = pyqtSignal(str)
     hotkey_start = pyqtSignal()          # emitidas desde el hilo del listener
     hotkey_stop = pyqtSignal()
+    dictated = pyqtSignal(str)           # dictado por la tecla normal
 
 
 class OrbApp:
@@ -68,6 +70,7 @@ class OrbApp:
         self.panel: ResultPanel | None = None
         self.ollama_panel: OllamaPanel | None = None
         self.polish_serial = 0        # para descartar respuestas canceladas
+        self.assistant_listening = False   # la grabacion en curso es una orden
 
         self.level_timer = QTimer()
         self.level_timer.setInterval(50)
@@ -90,6 +93,7 @@ class OrbApp:
         self.bridge.polished.connect(self._on_polished)
         self.bridge.hotkey_start.connect(self.start_dictation_from_hotkey)
         self.bridge.hotkey_stop.connect(self.stop_dictation_from_hotkey)
+        self.bridge.dictated.connect(self._on_dictated)
         self.bridge.install_status.connect(self._on_install_status)
         self.bridge.install_fraction.connect(self._on_install_fraction)
         self.bridge.install_done.connect(self._on_install_done)
@@ -108,11 +112,20 @@ class OrbApp:
             available = False
         if available:
             log.info("IA lista: %s, modelo %s", kind, model)
+            if hasattr(engine, "warm_up"):
+                threading.Thread(target=self._warm_up, args=(engine,), daemon=True).start()
         else:
             log.warning(
                 "IA no disponible (%s, modelo %s). Las acciones de pulido "
                 "fallaran hasta que arranque.", kind, model
             )
+
+    def _warm_up(self, engine) -> None:
+        try:
+            engine.warm_up()
+            log.info("Modelo cargado en memoria: la primera orden ya va rápida")
+        except Exception:  # noqa: BLE001
+            log.debug("No se pudo precargar el modelo", exc_info=True)
 
     # ------------------------------------------------------------------
     # Dictado
@@ -136,6 +149,7 @@ class OrbApp:
         self.orb.set_level(self.core.mic_level())
 
     def _on_cancel(self) -> None:
+        self.assistant_listening = False
         self.level_timer.stop()
         self.orb.set_level(0.0)
         self.core.cancel_custom_recording()
@@ -157,18 +171,92 @@ class OrbApp:
 
     def _on_transcribed(self, text: str, error: str) -> None:
         self.orb.set_busy(False)
+        assistant = self.assistant_listening
+        self.assistant_listening = False
         if error:
             log.error("Transcripcion fallida: %s", error)
             return
         if not text:
             log.info("Audio vacio o sin voz, nada que hacer")
             return
-        self.pending_text = text
-        log.info("Dictado: %s", text)
-        # Mantener pulsado hace lo mismo que el hotkey de dictado: escribe.
+        log.info("%s: %s", "Orden" if assistant else "Dictado", text)
+        if assistant:
+            # La tecla del asistente: todo lo que digas es una orden.
+            self._run_command(parse_command(text, strict=False), text)
+            return
+        self._on_dictated(text)
+
+    def _on_dictated(self, text: str) -> None:
+        """Dictado normal. Si empieza como una orden clara ("optimiza
+        prompt profesional...", "pasa esto a legal") la resuelve el
+        asistente; si no, se escribe tal cual donde estabas."""
+        command = parse_command(text, strict=True)
+        if command is not None:
+            self._run_command(command, text)
+            return
         # Las acciones de IA viven en el boton derecho, que sigue teniendo
         # este texto a mano por si lo quieres pulir despues.
-        self._paste(text)
+        self.pending_text = text
+        self._paste(text, remember=True)
+
+    # ------------------------------------------------------------------
+    # Ordenes por voz
+    # ------------------------------------------------------------------
+
+    def _source_text(self) -> tuple[str, str]:
+        """Sobre qué texto actúa una orden sin contenido ("pasa esto a
+        legal"): lo que haya en la mesa de trabajo; si no, lo que hayas
+        copiado despues de dictar; si no, lo ultimo que dictaste."""
+        if self.panel is not None:
+            try:
+                text = self.panel.text().strip()
+                if text:
+                    return text, "la mesa de trabajo"
+            except RuntimeError:
+                self.panel = None
+        try:
+            clip = (pyperclip.paste() or "").strip()
+        except Exception:
+            clip = ""
+        if len(clip) > 8000:
+            clip = ""
+        last = self.core.last_dictation or self.pending_text
+        copied_after = clip and clip != (self.core.clipboard_at_dictation or "").strip()
+        if clip and (copied_after or not last):
+            return clip, "lo que has copiado"
+        if last:
+            return last, "lo último que dictaste"
+        return "", ""
+
+    def _run_command(self, command, spoken: str) -> None:
+        if command is None:
+            return
+        action = command.action
+        content = command.content.strip()
+        origin = "lo que has dicho"
+        if len(content.split()) < 3:
+            source, origin = self._source_text()
+            if source:
+                content = source
+        if not content:
+            if not action.keywords:
+                # Orden libre sin texto al que aplicarla ("escribe un
+                # correo de bienvenida para nuevos clientes"): se crea
+                # desde cero.
+                content = "(Sin texto previo: crea el contenido desde cero siguiendo el encargo.)"
+                origin = "cero"
+            else:
+                self._show_panel(
+                    "",
+                    note=f"Entendido: {action.label}. Copia o dicta el texto y vuelve a pedirlo.",
+                )
+                return
+        log.info("Orden '%s' sobre %s (%d caracteres)", action.label, origin, len(content))
+        # La mesa se abre ya con el texto de partida, para que se vea que
+        # la orden se ha entendido mientras el modelo trabaja.
+        if self.panel is None:
+            self._show_panel(content if origin != "cero" else "")
+        self._polish(action, content)
 
     # ------------------------------------------------------------------
     # Mini-burbujas
@@ -181,6 +269,8 @@ class OrbApp:
         haber dictado nada."""
         if self.pending_text:
             return self.pending_text
+        if self.core.last_dictation:
+            return self.core.last_dictation
         try:
             clip = (pyperclip.paste() or "").strip()
         except Exception:
@@ -193,9 +283,8 @@ class OrbApp:
     def _menu_actions(self) -> list[tuple[str, str]]:
         if self._current_text():
             return (
-                [("Abrir panel", "__panel__")]
-                + [(a.label, a.label) for a in ACTIONS]
-                + [("Cerrar", "__quit__")]
+                [(a.label, a.label) for a in MENU_ACTIONS]
+                + [("Panel y más modos", "__panel__"), ("Cerrar", "__quit__")]
             )
         return [
             ("Más grande", "__bigger__"),
@@ -264,7 +353,7 @@ class OrbApp:
         serial = self.polish_serial
         self.orb.set_busy(True)
         if self.panel is not None:
-            self._panel_busy(f"{action.label}...")
+            self._panel_busy(f"{action.label}: trabajando...")
         log.info("Pulido '%s' sobre %d caracteres", action.label, len(text))
 
         def work():
@@ -327,11 +416,15 @@ class OrbApp:
     def _show_panel(self, text: str, note: str | None = None) -> None:
         _close_safely(self.panel)
         self.panel = ResultPanel(
-            text, self.orb.orb_center(), [a.label for a in ACTIONS]
+            text,
+            self.orb.orb_center(),
+            [a.label for a in MENU_ACTIONS],
+            [a.label for a in ACTIONS],
         )
         self.panel.destroyed.connect(self._forget_panel)
         self.panel.paste_requested.connect(self._paste_from_panel)
         self.panel.action_requested.connect(self._on_panel_action)
+        self.panel.free_requested.connect(self._on_panel_free)
         self.panel.cancel_requested.connect(self._cancel_polish)
         self.panel.dismissed.connect(self._forget)
         self.panel.show()
@@ -344,6 +437,17 @@ class OrbApp:
         action = ACTIONS_BY_LABEL.get(label)
         if action is not None:
             self._polish(action, text)
+
+    def _on_panel_free(self, instruction: str, text: str) -> None:
+        """Lo escrito en "Pídele otra cosa": si nombra un modo conocido se
+        usa ese experto; si no, la frase es el encargo."""
+        command = parse_command(instruction, strict=False)
+        if command is None:
+            return
+        action = command.action
+        if not action.keywords and not action.instruction:
+            action = free_action(instruction)
+        self._polish(action, text or "(Sin texto previo: crea el contenido desde cero siguiendo el encargo.)")
 
     def _paste_from_panel(self, text: str) -> None:
         _close_safely(self.panel)
@@ -413,16 +517,19 @@ class OrbApp:
                         )
                         return
 
-                self.bridge.install_status.emit(f"Descargando el modelo {model}...")
-                ollama_setup.pull_model(
-                    host,
-                    model,
-                    on_progress=lambda s: self.bridge.install_status.emit(
-                        f"Descargando {model}: {s}"
-                    ),
-                    on_fraction=self.bridge.install_fraction.emit,
-                )
-                self.bridge.install_done.emit("Listo. Ya puedes usar las acciones de IA.")
+                if not ollama_setup.has_model(host, model):
+                    self.bridge.install_status.emit(f"Descargando el modelo {model}...")
+                    ollama_setup.pull_model(
+                        host,
+                        model,
+                        on_progress=lambda s: self.bridge.install_status.emit(
+                            f"Descargando {model}: {s}"
+                        ),
+                        on_fraction=self.bridge.install_fraction.emit,
+                    )
+                self.bridge.install_status.emit("Preparando el asistente...")
+                ollama_setup.create_assistant_model(host, model)
+                self.bridge.install_done.emit("Listo. Ya puedes usar el asistente.")
             except Exception as exc:  # noqa: BLE001
                 log.exception("Error instalando Ollama")
                 self.bridge.install_done.emit(f"No se pudo instalar: {exc}")
@@ -468,7 +575,7 @@ class OrbApp:
     def _forget_panel(self, *_) -> None:
         self.panel = None
 
-    def _paste(self, text: str) -> None:
+    def _paste(self, text: str, remember: bool = False) -> None:
         """Devuelve el foco a la ventana donde estabas y pega alli.
 
         Sin el paso de restituir el foco, el Ctrl+V simulado acaba en la
@@ -477,15 +584,21 @@ class OrbApp:
         if not text:
             return
         self.focus.restore()
-        QTimer.singleShot(
-            PASTE_DELAY_MS, lambda: paste_text(text, self.core.auto_paste)
-        )
+
+        def do_paste():
+            previous = paste_text(text, self.core.auto_paste)
+            if remember:
+                self.core.remember_dictation(text, previous)
+
+        QTimer.singleShot(PASTE_DELAY_MS, do_paste)
 
     # ------------------------------------------------------------------
 
     def start_dictation_from_hotkey(self) -> None:
-        """El hotkey hace lo mismo que mantener pulsado el orbe, y ademas
-        se trae el orbe a la pantalla donde estas trabajando."""
+        """La tecla del asistente: graba como el orbe, se trae el orbe a la
+        pantalla donde estas trabajando, y lo que digas se trata como una
+        orden ("optimiza prompt profesional...", "pasa esto a legal")."""
+        self.assistant_listening = True
         self.orb.summon()
         self.orb.listening = True
         self.orb._ensure_timer()

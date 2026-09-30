@@ -2,6 +2,9 @@
 de IA a mano para seguir puliendo sin cerrar nada, y el boton de pegar
 para mandarlo a la ventana donde estabas (Gmail, un documento, lo que sea).
 
+Abajo del todo, "Pídele otra cosa": escribes el encargo con tus palabras
+("hazlo más corto", "ponlo en una tabla") y el asistente lo aplica.
+
 Sin marco, oscuro y pegado al orbe."""
 
 from __future__ import annotations
@@ -11,8 +14,10 @@ import time
 from PyQt6.QtCore import QPoint, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPainterPath
 from PyQt6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QPushButton,
     QTextEdit,
     QVBoxLayout,
@@ -21,7 +26,7 @@ from PyQt6.QtWidgets import (
 
 from brand_loader import BrandLoader
 
-WIDTH = 470
+WIDTH = 580
 BG = "#171022"
 INK = "#F4F1F7"
 MUTED = "#A99FB8"
@@ -49,10 +54,17 @@ QPushButton:disabled {{ background: #1C1530; color: #6B6280; }}
 class ResultPanel(QWidget):
     paste_requested = pyqtSignal(str)
     action_requested = pyqtSignal(str, str)   # etiqueta de accion, texto actual
+    free_requested = pyqtSignal(str, str)     # encargo escrito, texto actual
     cancel_requested = pyqtSignal()
     dismissed = pyqtSignal()
 
-    def __init__(self, text: str, anchor: QPoint, action_labels: list[str]):
+    def __init__(
+        self,
+        text: str,
+        anchor: QPoint,
+        action_labels: list[str],
+        more_labels: list[str] | None = None,
+    ):
         super().__init__()
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -99,7 +111,33 @@ class ResultPanel(QWidget):
             )
             actions_row.addWidget(button)
             self.action_buttons.append(button)
+
+        # El resto de modos, en un desplegable para no llenar el panel.
+        self.more = QComboBox()
+        self.more.addItem("Más modos...")
+        for label in more_labels or []:
+            if label not in action_labels:
+                self.more.addItem(label)
+        self.more.setStyleSheet(
+            f"QComboBox {{ background: {GHOST}; color: {INK}; border: none;"
+            f" border-radius: 8px; padding: 7px 10px; font-size: 12px; }}"
+            f"QComboBox QAbstractItemView {{ background: {GHOST}; color: {INK};"
+            f" selection-background-color: {PURPLE}; }}"
+        )
+        self.more.activated.connect(self._on_more)
+        actions_row.addWidget(self.more)
         layout.addLayout(actions_row)
+
+        self.ask = QLineEdit()
+        self.ask.setPlaceholderText(
+            "Pídele otra cosa y pulsa Enter: hazlo más corto, ponlo en una tabla..."
+        )
+        self.ask.setStyleSheet(
+            f"QLineEdit {{ background: #0F0A16; color: {INK}; border: 1px solid #2A1F3D;"
+            f" border-radius: 8px; padding: 8px 10px; font-size: 12px; }}"
+        )
+        self.ask.returnPressed.connect(self._on_ask)
+        layout.addWidget(self.ask)
 
         bottom = QHBoxLayout()
         bottom.setSpacing(6)
@@ -122,7 +160,7 @@ class ResultPanel(QWidget):
         bottom.addWidget(self.close_button, 1)
         layout.addLayout(bottom)
 
-        self.resize(WIDTH, 300)
+        self.resize(WIDTH, 360)
         self._place_near(anchor)
         self.editor.setFocus()
 
@@ -146,6 +184,8 @@ class ResultPanel(QWidget):
             self.paste_button.setEnabled(False)
             for button in self.action_buttons:
                 button.setEnabled(False)
+            self.more.setEnabled(False)
+            self.ask.setEnabled(False)
             self._tick.start()
         else:
             self._tick.stop()
@@ -156,6 +196,22 @@ class ResultPanel(QWidget):
             self.paste_button.setEnabled(True)
             for button in self.action_buttons:
                 button.setEnabled(True)
+            self.more.setEnabled(True)
+            self.ask.setEnabled(True)
+
+    def _on_more(self, index: int) -> None:
+        if index <= 0:
+            return
+        label = self.more.itemText(index)
+        self.more.setCurrentIndex(0)
+        self.action_requested.emit(label, self.editor.toPlainText())
+
+    def _on_ask(self) -> None:
+        instruction = self.ask.text().strip()
+        if not instruction:
+            return
+        self.ask.clear()
+        self.free_requested.emit(instruction, self.editor.toPlainText())
 
     def _update_elapsed(self) -> None:
         """Contar los segundos en voz alta evita la duda de si se ha
