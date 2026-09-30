@@ -182,7 +182,7 @@ class ActionBubbles(QWidget):
             label, instruction = self.actions[i]
             if instruction == "__quit__":
                 color = DANGER
-            elif instruction == "":
+            elif instruction in ("", "__hide__"):
                 color = TEAL_HOT if i == self.hot else TEAL
             else:
                 color = PURPLE_HOT if i == self.hot else PURPLE

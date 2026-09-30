@@ -55,6 +55,7 @@ class Bridge(QObject):
     hotkey_start = pyqtSignal()          # emitidas desde el hilo del listener
     hotkey_stop = pyqtSignal()
     dictated = pyqtSignal(str)           # dictado por la tecla normal
+    show_orb = pyqtSignal()              # una tecla lo vuelve a mostrar
 
 
 class OrbApp:
@@ -94,6 +95,7 @@ class OrbApp:
         self.bridge.hotkey_start.connect(self.start_dictation_from_hotkey)
         self.bridge.hotkey_stop.connect(self.stop_dictation_from_hotkey)
         self.bridge.dictated.connect(self._on_dictated)
+        self.bridge.show_orb.connect(self.show_orb)
         self.bridge.install_status.connect(self._on_install_status)
         self.bridge.install_fraction.connect(self._on_install_fraction)
         self.bridge.install_done.connect(self._on_install_done)
@@ -284,13 +286,20 @@ class OrbApp:
         if self._current_text():
             return (
                 [(a.label, a.label) for a in MENU_ACTIONS]
-                + [("Panel y más modos", "__panel__"), ("Cerrar", "__quit__")]
+                + [("Panel y más modos", "__panel__")]
+                + self._close_actions()
             )
         return [
             ("Más grande", "__bigger__"),
             ("Más pequeño", "__smaller__"),
-            ("Cerrar", "__quit__"),
-        ]
+        ] + self._close_actions()
+
+    @staticmethod
+    def _close_actions() -> list[tuple[str, str]]:
+        # "Cerrar" solo esconde la bola: Vozdoo sigue escuchando las teclas
+        # y cualquiera de las dos la vuelve a abrir. "Salir del todo" apaga
+        # el programa (se vuelve a abrir desde el icono).
+        return [("Cerrar", "__hide__"), ("Salir del todo", "__quit__")]
 
     def _on_menu(self) -> None:
         self._open_bubbles(self._menu_actions())
@@ -314,6 +323,9 @@ class OrbApp:
         self.bubbles = None
         if payload == "__quit__":
             self.quit()
+            return
+        if payload == "__hide__":
+            self.hide_orb()
             return
         if payload == "__bigger__":
             self.orb.set_size(self.orb.base_size + 8)
@@ -608,6 +620,17 @@ class OrbApp:
         self.orb.listening = False
         self.orb._ensure_timer()
         self._on_stop()
+
+    def hide_orb(self) -> None:
+        _close_safely(self.bubbles)
+        self.bubbles = None
+        self.orb._save_state()
+        self.orb.hide()
+        log.info("Bola cerrada. Vozdoo sigue activo: Ctrl+Win o Alt+Win la vuelven a abrir.")
+
+    def show_orb(self) -> None:
+        if not self.orb.isVisible():
+            self.orb.summon()
 
     def quit(self) -> None:
         self.orb.close()

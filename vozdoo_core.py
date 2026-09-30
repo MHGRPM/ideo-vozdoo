@@ -307,6 +307,9 @@ class Vozdoo:
             if self.buffer.recording or self.processing:
                 return
             self._active_mode = mode
+            if self.orb_app is not None:
+                # Si la bola estaba cerrada, la tecla la vuelve a abrir.
+                self.orb_app.bridge.show_orb.emit()
             log.info("Grabando (%s)... (suelta para transcribir)", mode)
             beep(800, 80)
             self.buffer.start()

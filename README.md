@@ -39,6 +39,8 @@ icono **Vozdoo** en el escritorio. Para actualizar, la misma línea.
 | Órdenes libres | Cualquier otra petición ("hazlo más gracioso", "ponlo en una tabla") |
 | Mesa de trabajo | Panel para retocar, encadenar cambios y **Pegar donde estaba** |
 | Menú | Botón derecho sobre la bola |
+| Mover la bola | Arrástrala a cualquier sitio, en cualquier pantalla: se queda donde la dejes |
+| Cerrar y volver a abrir | Botón derecho → **Cerrar** la esconde; **Ctrl + Win** o **Alt + Win** la vuelven a abrir. **Salir del todo** apaga Vozdoo (se abre desde el icono) |
 | Chatear escribiendo | App de Ollama → modelo `vozdoo` |
 | Privacidad | 100 % local, funciona sin internet una vez instalado |
 

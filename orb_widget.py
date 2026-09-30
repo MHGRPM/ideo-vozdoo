@@ -145,15 +145,21 @@ class OrbWidget(QWidget):
         return QPoint(area.right() - box - MARGIN, area.bottom() - box - MARGIN)
 
     def summon(self) -> None:
-        """Trae el orbe a la pantalla donde esta el raton y lo hace notar.
+        """Muestra el orbe (si estaba cerrado) y lo hace notar.
 
-        Con varios monitores el orbe se queda en uno y trabajas en otro;
-        y si se pierde de vista no hay forma de recuperarlo salvo borrar
-        el fichero de estado. Con esto, el hotkey siempre lo rescata."""
+        Respeta el sitio donde lo dejaste, en cualquier pantalla. Solo lo
+        recoloca si se ha quedado fuera de todas (por ejemplo, al
+        desconectar un monitor): entonces lo trae a la pantalla donde esta
+        el raton. Asi el hotkey siempre lo rescata sin robarte la
+        posicion elegida."""
         box = self._box()
-        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
-        area = screen.availableGeometry()
-        if not area.contains(self.geometry().center()):
+        center = self.geometry().center()
+        visible = any(
+            s.availableGeometry().contains(center) for s in QGuiApplication.screens()
+        )
+        if not visible:
+            screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+            area = screen.availableGeometry()
             self.move(area.right() - box - MARGIN, area.bottom() - box - MARGIN)
             self._save_state()
         self.show()
