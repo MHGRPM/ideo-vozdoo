@@ -61,20 +61,39 @@ cd "$DIR"
 
 # 2. Piezas del sistema (solo Linux: Mac ya las trae) --------------------------
 if [ "$OS" = "Linux" ]; then
-    say "Instalando piezas del sistema (te pedirá tu contraseña)"
     if command -v apt-get >/dev/null 2>&1; then
-        sudo apt-get update -qq
-        sudo apt-get install -y -qq curl libportaudio2 xclip libxcb-cursor0 \
-            libxkbcommon-x11-0 libxcb-icccm4 libxcb-keysyms1 libxcb-image0 \
-            libxcb-render-util0 >/dev/null
-    elif command -v dnf >/dev/null 2>&1; then
-        sudo dnf install -y -q portaudio xclip xcb-util-cursor xcb-util-wm \
-            xcb-util-keysyms xcb-util-image xcb-util-renderutil libxkbcommon-x11
-    elif command -v pacman >/dev/null 2>&1; then
-        sudo pacman -S --needed --noconfirm portaudio xclip xcb-util-cursor \
-            xcb-util-wm xcb-util-keysyms xcb-util-image xcb-util-renderutil
+        APT_PKGS="curl libportaudio2 xclip libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-keysyms1 libxcb-image0 libxcb-render-util0"
+        MISSING=""
+        for pkg in $APT_PKGS; do
+            dpkg-query -W -f='${Status}' "$pkg" 2>/dev/null | grep -q "ok installed" || MISSING="$MISSING $pkg"
+        done
+        if [ -n "$MISSING" ]; then
+            say "Instalando piezas del sistema (te pedirá tu contraseña)"
+            # Los avisos de otros repositorios del ordenador (Chrome, Yarn...)
+            # no afectan: por eso no se para si "update" se queja.
+            sudo apt-get update -qq 2>/dev/null || true
+            if ! sudo apt-get install -y -qq $MISSING >/dev/null; then
+                # Lo típico: una instalación anterior del sistema se quedó a
+                # medias. Se repara y se reintenta una vez.
+                info "El sistema tenía una instalación a medias; reparándola..."
+                sudo dpkg --configure -a >/dev/null 2>&1 || true
+                sudo apt-get install -y -qq $MISSING >/dev/null \
+                    || warn "No se pudieron instalar:$MISSING. Prueba en una terminal: sudo dpkg --configure -a && sudo apt-get install -y$MISSING"
+            fi
+        fi
     else
-        warn "No reconozco tu Linux. Instala a mano: portaudio, xclip y xcb-util-cursor."
+        say "Instalando piezas del sistema (te pedirá tu contraseña)"
+        if command -v dnf >/dev/null 2>&1; then
+            sudo dnf install -y -q portaudio xclip xcb-util-cursor xcb-util-wm \
+                xcb-util-keysyms xcb-util-image xcb-util-renderutil libxkbcommon-x11 \
+                || warn "No se pudieron instalar algunas piezas del sistema."
+        elif command -v pacman >/dev/null 2>&1; then
+            sudo pacman -S --needed --noconfirm portaudio xclip xcb-util-cursor \
+                xcb-util-wm xcb-util-keysyms xcb-util-image xcb-util-renderutil \
+                || warn "No se pudieron instalar algunas piezas del sistema."
+        else
+            warn "No reconozco tu Linux. Instala a mano: portaudio, xclip y xcb-util-cursor."
+        fi
     fi
 fi
 
