@@ -13,6 +13,37 @@ textos y prompts, gratis y 100 % en tu ordenador.
 Nada sale de tu ordenador: la voz la transcribe Whisper y los textos los
 trabaja una IA local (Ollama). Sin cuentas, sin claves, sin coste por uso.
 
+## Resumen rápido
+
+**Instalar** (una línea; no hace falta tener nada instalado ni descargar
+nada antes, lo baja todo de aquí):
+
+| Sistema | Dónde | Pegar esto y pulsar Enter |
+|---|---|---|
+| Windows | PowerShell | `irm https://raw.githubusercontent.com/MHGRPM/ideo-vozdoo/main/install.ps1 \| iex` |
+| Mac | Terminal | `curl -fsSL https://raw.githubusercontent.com/MHGRPM/ideo-vozdoo/main/install.sh \| bash` |
+| Linux | Terminal | `curl -fsSL https://raw.githubusercontent.com/MHGRPM/ideo-vozdoo/main/install.sh \| bash` |
+
+Unos 10 minutos la primera vez (descarga ~3 GB). Al final pregunta si
+quieres que arranque solo al encender el ordenador y abre Vozdoo. Queda un
+icono **Vozdoo** en el escritorio. Para actualizar, la misma línea.
+
+**Funciones:**
+
+| Qué | Cómo |
+|---|---|
+| Dictar | **Ctrl + Win** pulsado, hablas, sueltas: se escribe donde está el cursor |
+| Asistente por voz | **Alt + Win** pulsado y dices la orden: "optimiza prompt profesional: ...", "pasa esto a texto legal", "hazlo persuasivo" |
+| Sobre qué texto | El que digas tras la orden; si no, lo último dictado o copiado |
+| 14 modos expertos | Prompt profesional, prompt de imagen, persuasivo, legal, formal, correo, LinkedIn, cercano, sencillo, en puntos, resumir, ampliar, inglés, corregir |
+| Órdenes libres | Cualquier otra petición ("hazlo más gracioso", "ponlo en una tabla") |
+| Mesa de trabajo | Panel para retocar, encadenar cambios y **Pegar donde estaba** |
+| Menú | Botón derecho sobre la bola |
+| Chatear escribiendo | App de Ollama → modelo `vozdoo` |
+| Privacidad | 100 % local, funciona sin internet una vez instalado |
+
+(En Mac: Win = Cmd, Alt = Option.)
+
 ---
 
 ## Instalar (un solo paso)
